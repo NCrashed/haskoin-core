@@ -68,8 +68,6 @@ import Haskoin.Crypto.Hash
 import Haskoin.Network.Data
 import Haskoin.Util
 
-import Debug.Trace 
-
 -- | Elliptic curve public key type with expected serialized compression flag.
 data PublicKey = PublicKey
   { point :: !PubKey,
@@ -166,15 +164,11 @@ fromMiniKey bs = do
 fromWif :: Network -> Base58 -> Maybe PrivateKey
 fromWif net wif = do
   bs <- decodeBase58Check wif
-  traceM $ "Decoded bs: " ++ show (encodeHex bs)
   -- Check that this is a private key
   guard (BS.head bs == secretPrefix net)
   case BS.length bs of
     -- Uncompressed format
-    33 -> do 
-      traceM $ "Uncompressed': " ++ show ((encodeHex . BS.init) bs)
-      traceM $ "Uncompressed:  " ++ show ((secKey . BS.tail) bs)
-      wrapSecKey False <$> (secKey . BS.tail) bs
+    33 -> wrapSecKey False <$> (secKey . BS.tail) bs
     -- Compressed format
     34 -> do
       guard $ BS.last bs == 0x01
