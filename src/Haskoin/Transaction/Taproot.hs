@@ -3,11 +3,9 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE NoFieldSelectors #-}
 
 -- |
 -- Module      : Haskoin.Transaction.Taproot
@@ -81,13 +79,13 @@ import Haskoin.Util
 -- bytes.
 --
 -- @since 0.21.0
-newtype XOnlyPubKey = XOnlyPubKey {point :: PubKey}
+newtype XOnlyPubKey = XOnlyPubKey {xonlyPoint :: PubKey}
   deriving (Read, Show)
 
 instance Eq XOnlyPubKey where
   XOnlyPubKey k1 == XOnlyPubKey k2 = f k1 == f k2
     where
-      f = BS.take 32 . (.get)
+      f = BS.take 32 . getPubKey
 
 instance Marshal Ctx XOnlyPubKey where
   marshalPut ctx (XOnlyPubKey pk) =
@@ -180,7 +178,7 @@ leafHash leafVersion leafScript =
 --
 -- @since 0.21.0
 data TaprootOutput = TaprootOutput
-  { internalKey :: PubKey,
+  { outInternalKey :: PubKey,
     mast :: Maybe MAST
   }
 
@@ -188,10 +186,10 @@ data TaprootOutput = TaprootOutput
 taprootOutputKey :: Ctx -> TaprootOutput -> PubKey
 taprootOutputKey ctx TaprootOutput {..} =
   fromMaybe keyFail $
-    tweak commitment >>= tweakAddPubKey ctx internalKey
+    tweak commitment >>= tweakAddPubKey ctx outInternalKey
   where
     commitment =
-      taprootCommitment ctx internalKey $
+      taprootCommitment ctx outInternalKey $
         mastCommitment <$> mast
     keyFail = error "haskoin-core taprootOutputKey: key derivation failed"
 
@@ -272,14 +270,14 @@ encodeTaprootWitness ctx = \case
   KeyPathSpend signature -> pure signature
   ScriptPathSpend scriptPathData -> wit scriptPathData
   where
-    wit d = (.stack) d <> [script d, keys d, annex d]
+    wit d = stack d <> [script' d, keys d, annex' d]
     keys d = mconcat [verpar d, xonlyk d, ctrl d]
-    script = runPutS . serialize . (.script)
-    verpar d = BS.pack [(.leafVersion) d .|. parity d]
-    xonlyk = runPutS . marshalPut ctx . XOnlyPubKey . (.internalKey)
-    annex = fromMaybe mempty . (.annex)
-    ctrl = mconcat . (.control)
-    parity = bool 0 1 . (.extIsOdd)
+    script' = runPutS . serialize . script
+    verpar d = BS.pack [leafVersion d .|. parity d]
+    xonlyk = runPutS . marshalPut ctx . XOnlyPubKey . internalKey
+    annex' = fromMaybe mempty . annex
+    ctrl = mconcat . control
+    parity = bool 0 1 . extIsOdd
 
 -- | Verify that the script path spend is valid, except for script execution.
 --
@@ -293,20 +291,20 @@ verifyScriptPathData ::
 verifyScriptPathData ctx outkey spd = fromMaybe False $ do
   tweak commitment
     >>= fmap onComputedKey
-      . tweakAddPubKey ctx spd.internalKey
+      . tweakAddPubKey ctx (internalKey spd)
   where
     onComputedKey computedKey =
       XOnlyPubKey outkey == XOnlyPubKey computedKey
         && expectedParity == keyParity ctx computedKey
     commitment =
-      taprootCommitment ctx spd.internalKey (Just merkleRoot)
+      taprootCommitment ctx (internalKey spd) (Just merkleRoot)
     merkleRoot =
       foldl' hashBranch theLeafHash $
-        mapMaybe (digestFromByteString @SHA256) spd.control
+        mapMaybe (digestFromByteString @SHA256) (control spd)
     theLeafHash =
-      (leafHash <$> (.&. 0xFE) . (.leafVersion) <*> (.script))
+      (leafHash <$> (.&. 0xFE) . leafVersion <*> script)
         spd
-    expectedParity = bool 0 1 spd.extIsOdd
+    expectedParity = bool 0 1 $ extIsOdd spd
 
 keyParity :: Ctx -> PubKey -> Word8
 keyParity ctx key =

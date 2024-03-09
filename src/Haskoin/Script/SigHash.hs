@@ -6,10 +6,8 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE NoFieldSelectors #-}
 
 -- |
 -- Module      : Haskoin.Script.SigHash
@@ -186,7 +184,7 @@ sigHashAddForkId sh w = (fromIntegral w `shiftL` 8) .|. (sh .&. 0x000000ff)
 -- | Add fork id of a particular network to a 'SigHash'.
 sigHashAddNetworkId :: Network -> SigHash -> SigHash
 sigHashAddNetworkId net =
-  (`sigHashAddForkId` fromMaybe 0 net.sigHashForkId)
+  (`sigHashAddForkId` fromMaybe 0 (netSigHashForkId net))
 
 -- | Get fork id from 'SigHash'.
 sigHashGetForkId :: SigHash -> Word32
@@ -208,19 +206,19 @@ txSigHash ::
   -- | hash to be signed
   Hash256
 txSigHash net tx out v i sh
-  | hasForkIdFlag sh && isJust net.sigHashForkId =
+  | hasForkIdFlag sh && isJust (netSigHashForkId net) =
       txSigHashForkId net tx out v i sh
   | otherwise = do
-      let newIn = buildInputs tx.inputs fout i sh
+      let newIn = buildInputs (txInputs tx) fout i sh
       -- When SigSingle and input index > outputs, then sign integer 1
       fromMaybe one $ do
-        newOut <- buildOutputs tx.outputs i sh
-        let newTx = Tx tx.version newIn newOut [] tx.locktime
+        newOut <- buildOutputs (txOutputs tx) i sh
+        let newTx = Tx (txVersion tx) newIn newOut [] (txLocktime tx)
         return . doubleSHA256 . runPutS $ do
           serialize newTx
           putWord32le $ fromIntegral sh
   where
-    fout = Script $ filter (/= OP_CODESEPARATOR) out.ops
+    fout = Script $ filter (/= OP_CODESEPARATOR) $ scriptOps out
     one = "0100000000000000000000000000000000000000000000000000000000000000"
 
 -- | Build transaction inputs for computing sighashes.
@@ -230,11 +228,11 @@ buildInputs txins out i sh
   | isSigHashAll sh || isSigHashUnknown sh = single
   | otherwise = zipWith noSeq single [0 ..]
   where
-    serialOut TxIn {..} = TxIn {script = runPutS $ serialize out, ..}
-    emptyIn TxIn {..} = TxIn {script = B.empty, ..}
+    serialOut TxIn {..} = TxIn {txInScript = runPutS $ serialize out, ..}
+    emptyIn TxIn {..} = TxIn {txInScript = B.empty, ..}
     emptyIns = map emptyIn txins
     single = updateIndex i emptyIns serialOut
-    noSeq TxIn {..} j = TxIn {sequence = if i == j then sequence else 0, ..}
+    noSeq TxIn {..} j = TxIn {txSequence = if i == j then txSequence else 0, ..}
 
 -- | Build transaction outputs for computing sighashes.
 buildOutputs :: [TxOut] -> Int -> SigHash -> Maybe [TxOut]
@@ -264,30 +262,30 @@ txSigHashForkId ::
   Hash256
 txSigHashForkId net tx out v i sh =
   doubleSHA256 . runPutS $ do
-    putWord32le tx.version
+    putWord32le $ txVersion tx
     serialize hashPrevouts
     serialize hashSequence
-    serialize (tx.inputs !! i).outpoint
+    serialize $ txInOutpoint ((txInputs tx) !! i)
     putScript out
     putWord64le v
-    putWord32le (tx.inputs !! i).sequence
+    putWord32le $ txSequence ((txInputs tx) !! i)
     serialize hashOutputs
-    putWord32le tx.locktime
+    putWord32le (txLocktime tx)
     putWord32le $ fromIntegral $ sigHashAddNetworkId net sh
   where
     hashPrevouts
       | not (anyoneCanPay sh) =
-          doubleSHA256 . runPutS $ mapM_ (serialize . (.outpoint)) tx.inputs
+          doubleSHA256 . runPutS $ mapM_ (serialize . txInOutpoint) (txInputs tx)
       | otherwise = zeros
     hashSequence
       | not (anyoneCanPay sh || isSigHashSingle sh || isSigHashNone sh) =
-          doubleSHA256 . runPutS $ mapM_ (putWord32le . (.sequence)) tx.inputs
+          doubleSHA256 . runPutS $ mapM_ (putWord32le . txSequence) (txInputs tx)
       | otherwise = zeros
     hashOutputs
       | not (isSigHashSingle sh || isSigHashNone sh) =
-          doubleSHA256 . runPutS $ mapM_ serialize tx.outputs
-      | isSigHashSingle sh && i < length tx.outputs =
-          doubleSHA256 . runPutS $ serialize $ tx.outputs !! i
+          doubleSHA256 . runPutS $ mapM_ serialize (txOutputs tx)
+      | isSigHashSingle sh && i < length (txOutputs tx) =
+          doubleSHA256 . runPutS $ serialize $ (txOutputs tx) !! i
       | otherwise = zeros
     putScript s = do
       let encodedScript = runPutS $ serialize s
@@ -322,7 +320,7 @@ instance Marshal (Network, Ctx) TxSignature where
         sh <- fromIntegral <$> getWord8
         when (isSigHashUnknown sh) $
           fail "Non-canonical signature: unknown hashtype byte"
-        when (isNothing net.sigHashForkId && hasForkIdFlag sh) $
+        when (isNothing (netSigHashForkId net) && hasForkIdFlag sh) $
           fail "Non-canonical signature: invalid network for forkId"
         return $ TxSignature sig sh
 

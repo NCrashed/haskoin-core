@@ -1,8 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE NoFieldSelectors #-}
 
 -- |
 -- Module      : Haskoin.Constants
@@ -58,7 +56,7 @@ versionString = "Unavailable"
 
 -- | Query known networks by name.
 netByName :: String -> Maybe Network
-netByName str = find ((== str) . (.name)) allNets
+netByName str = find ((== str) . name) allNets
 
 -- | Bitcoin SegWit network. Symbol: BTC.
 btc :: Network
@@ -70,7 +68,7 @@ btc =
       secretPrefix = 128,
       xPubPrefix = 0x0488b21e,
       xPrvPrefix = 0x0488ade4,
-      magic = 0xf9beb4d9,
+      netMagic = 0xf9beb4d9,
       genesisHeader =
         BlockHeader
           0x01
@@ -150,7 +148,7 @@ btc =
           "seed.bitcoin.wiz.biz" -- Jason Maurice
         ],
       bip44Coin = 0,
-      sigHashForkId = Nothing,
+      netSigHashForkId = Nothing,
       edaHeight = Nothing,
       daaHeight = Nothing,
       asertActivationTime = Nothing,
@@ -172,7 +170,7 @@ btcTest =
       secretPrefix = 239,
       xPubPrefix = 0x043587cf,
       xPrvPrefix = 0x04358394,
-      magic = 0x0b110907,
+      netMagic = 0x0b110907,
       genesisHeader =
         BlockHeader
           0x01
@@ -210,7 +208,7 @@ btcTest =
           "testnet-seed.bluematt.me"
         ],
       bip44Coin = 1,
-      sigHashForkId = Nothing,
+      netSigHashForkId = Nothing,
       edaHeight = Nothing,
       daaHeight = Nothing,
       asertActivationTime = Nothing,
@@ -232,7 +230,7 @@ btcRegTest =
       secretPrefix = 239,
       xPubPrefix = 0x043587cf,
       xPrvPrefix = 0x04358394,
-      magic = 0xfabfb5da,
+      netMagic = 0xfabfb5da,
       genesisHeader =
         BlockHeader
           -- 0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206
@@ -261,7 +259,7 @@ btcRegTest =
       checkpoints = [],
       seeds = ["localhost"],
       bip44Coin = 1,
-      sigHashForkId = Nothing,
+      netSigHashForkId = Nothing,
       edaHeight = Nothing,
       daaHeight = Nothing,
       asertActivationTime = Nothing,
@@ -283,7 +281,7 @@ bch =
       secretPrefix = 128,
       xPubPrefix = 0x0488b21e,
       xPrvPrefix = 0x0488ade4,
-      magic = 0xe3e1f3e8,
+      netMagic = 0xe3e1f3e8,
       genesisHeader =
         BlockHeader
           0x01
@@ -369,7 +367,7 @@ bch =
           "dnsseed.electroncash.de"
         ],
       bip44Coin = 145,
-      sigHashForkId = Just 0,
+      netSigHashForkId = Just 0,
       edaHeight = Just 478559,
       daaHeight = Just 404031,
       asertActivationTime = Just 1605441600,
@@ -391,7 +389,7 @@ bchTest4 =
       secretPrefix = 239,
       xPubPrefix = 0x043587cf,
       xPrvPrefix = 0x04358394,
-      magic = 0xe2b7daaf,
+      netMagic = 0xe2b7daaf,
       genesisHeader =
         BlockHeader
           0x01
@@ -440,7 +438,7 @@ bchTest4 =
           "testnet4-seed.flowee.cash"
         ],
       bip44Coin = 1,
-      sigHashForkId = Just 0,
+      netSigHashForkId = Just 0,
       edaHeight = Just 7,
       daaHeight = Just 3000,
       asertActivationTime = Just 1605441600,
@@ -462,7 +460,7 @@ bchTest =
       secretPrefix = 239,
       xPubPrefix = 0x043587cf,
       xPrvPrefix = 0x04358394,
-      magic = 0xf4e5f3f4,
+      netMagic = 0xf4e5f3f4,
       genesisHeader =
         BlockHeader
           0x01
@@ -510,7 +508,7 @@ bchTest =
           "seed.tbch.loping.net"
         ],
       bip44Coin = 1,
-      sigHashForkId = Just 0,
+      netSigHashForkId = Just 0,
       edaHeight = Just 1155876,
       daaHeight = Just 1188697,
       asertActivationTime = Just 1605441600,
@@ -532,7 +530,7 @@ bchRegTest =
       secretPrefix = 239,
       xPubPrefix = 0x043587cf,
       xPrvPrefix = 0x04358394,
-      magic = 0xdab5bffa,
+      netMagic = 0xdab5bffa,
       genesisHeader =
         BlockHeader
           -- 0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206
@@ -565,7 +563,7 @@ bchRegTest =
         ],
       seeds = ["localhost"],
       bip44Coin = 1,
-      sigHashForkId = Just 0,
+      netSigHashForkId = Just 0,
       edaHeight = Nothing,
       daaHeight = Just 0,
       asertActivationTime = Just 1605441600,

@@ -1,5 +1,4 @@
 {-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Haskoin.Crypto.SignatureSpec (spec) where
@@ -180,7 +179,7 @@ toVector (prv, m, res) = (fromJust $ (secKey <=< decodeHex) prv, cs m, res)
 
 testRFC6979Vector :: Ctx -> (SecKey, ByteString, Text) -> Assertion
 testRFC6979Vector ctx (prv, m, res) = do
-  assertEqual "RFC 6979 Vector" res (encodeHex (exportCompactSig ctx s).get)
+  assertEqual "RFC 6979 Vector" res (encodeHex (getCompactSig $ exportCompactSig ctx s))
   assertBool "Signature is valid" $ verifyHashSig ctx h s (derivePubKey ctx prv)
   assertBool "Signature is canonical" $ testIsCanonical ctx s
   assertBool "Signature is normalized" $ isCanonicalHalfOrder ctx s
@@ -248,7 +247,7 @@ testBip143p2wpkh ctx =
     Just key1 =
       secHexKey
         "619c335025c7f4012e556c2a58b2506e30b8511b53ade95ea316fd8c3286feb9"
-    [op0, op1] = (.outpoint) <$> unsignedTx.inputs
+    [op0, op1] = txInOutpoint <$> (txInputs unsignedTx)
     sigIn0 = SigInput (PayPK pubKey0) 625000000 op0 sigHashAll Nothing
     WitnessPubKeyAddress h = pubKeyWitnessAddr ctx $ toPubKey ctx key1
     sigIn1 = SigInput (PayWitnessPKHash h) 600000000 op1 sigHashAll Nothing
@@ -290,7 +289,7 @@ testBip143p2shp2wpkh ctx =
     Just key0 =
       secHexKey
         "eb696a065ef48a2192da5b28b694f87544b30fae8327c4510137a922f32c6dcf"
-    op0 = (head unsignedTx.inputs).outpoint
+    op0 = txInOutpoint (head (txInputs unsignedTx))
     WitnessPubKeyAddress h = pubKeyWitnessAddr ctx $ toPubKey ctx key0
     sigIn0 = SigInput (PayWitnessPKHash h) 1000000000 op0 sigHashAll Nothing
     generatedSignedTx = signNestedWitnessTx btc ctx unsignedTx [sigIn0] [key0]
@@ -333,7 +332,7 @@ testP2WSHMulsig ctx =
       "0100000001d2e34df5d7ee565208eddd231548916b9b0e99f4f5071f896134a4\
       \48c5fb07bf0100000000ffffffff01f0b9f505000000001976a9143d5a352cab\
       \583b12fbcb26d1269b4a2c951a33ad88ac00000000"
-    op0 = (head unsignedTx.inputs).outpoint
+    op0 = txInOutpoint (head (txInputs unsignedTx))
     Just keys =
       traverse
         secHexKey
@@ -424,7 +423,7 @@ testBip143p2shp2wpkhMulsig ctx =
       \a29787b96e0100000000ffffffff0200e9a435000000001976a914389ffce9cd\
       \9ae88dcc0631e88a821ffdbe9bfe2688acc0832f05000000001976a9147480a3\
       \3f950689af511e6e84c138dbbd3c3ee41588ac00000000"
-    op0 = (head unsignedTx.inputs).outpoint
+    op0 = txInOutpoint (head (txInputs unsignedTx))
     rawKeys =
       [ "730fff80e1413068a05b57d6a58261f07551163369787f349438ea38ca80fac6",
         "11fa3d25a17cbc22b29c44a484ba552b5a53149d106d3d853e22fdd05a2d8bb3",

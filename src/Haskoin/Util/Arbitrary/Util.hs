@@ -1,5 +1,4 @@
 {-# LANGUAGE ExistentialQuantification #-}
-{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 -- |
@@ -150,19 +149,19 @@ instance Default IdentityTests where
 testIdentity :: IdentityTests -> Spec
 testIdentity t = do
   describe "Read/Show Encoding" $
-    forM_ t.readTests $
+    forM_ (readTests t) $
       \(ReadBox g) -> testRead g
   describe "Data.Aeson Encoding" $
-    forM_ t.jsonTests $
+    forM_ (jsonTests t) $
       \(JsonBox g) -> testJson g
   describe "MarshalJSON Encoding" $
-    forM_ t.marshalJsonTests $
+    forM_ (marshalJsonTests t) $
       \(MarshalJsonBox g) -> testMarshalJson g
   describe "Binary Encoding" $
-    forM_ t.serialTests $
+    forM_ (serialTests t) $
       \(SerialBox g) -> testSerial g
   describe "Marshal Encoding" $
-    forM_ t.marshalTests $
+    forM_ (marshalTests t) $
       \(MarshalBox g) -> testMarshal g
 
 -- | Generate Read/Show identity tests

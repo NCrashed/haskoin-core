@@ -1,7 +1,6 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 -- |
@@ -100,7 +99,7 @@ decodeStrictSig ctx bs = do
   -- 4.1.4.1 (r and s can not be zero)
   let compact = exportCompactSig ctx g
   let zero = B.replicate 32 0
-  guard $ B.take 32 compact.get /= zero
-  guard $ (B.take 32 . B.drop 32) compact.get /= zero
+  guard $ B.take 32 (getCompactSig compact) /= zero
+  guard $ (B.take 32 . B.drop 32) (getCompactSig compact) /= zero
   guard $ isCanonicalHalfOrder ctx g
   return g

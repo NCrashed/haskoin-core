@@ -5,9 +5,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE NoFieldSelectors #-}
 
 -- |
 -- Module      : Haskoin.Script.Standard
@@ -79,27 +77,27 @@ import Haskoin.Util
 -- in a transaction output.
 data ScriptOutput
   = -- | pay to public key
-    PayPK {key :: !PublicKey}
+    PayPK {outputKey :: !PublicKey}
   | -- | pay to public key hash
-    PayPKHash {hash160 :: !Hash160}
+    PayPKHash {outputHash160 :: !Hash160}
   | -- | multisig
     PayMulSig
       { keys :: ![PublicKey],
         required :: !Int
       }
   | -- | pay to a script hash
-    PayScriptHash {hash160 :: !Hash160}
+    PayScriptHash {outputHash160 :: !Hash160}
   | -- | pay to witness public key hash
-    PayWitnessPKHash {hash160 :: !Hash160}
+    PayWitnessPKHash {outputHash160 :: !Hash160}
   | -- | pay to witness script hash
-    PayWitnessScriptHash {hash256 :: !Hash256}
+    PayWitnessScriptHash {outputHash256 :: !Hash256}
   | -- | another pay to witness address
     PayWitness
-      { version :: !Word8,
-        bytes :: !ByteString
+      { outputVersion :: !Word8,
+        outputBytes :: !ByteString
       }
   | -- | provably unspendable data carrier
-    DataCarrier {bytes :: !ByteString}
+    DataCarrier {outputBytes :: !ByteString}
   deriving (Eq, Show, Read, Generic, NFData)
 
 instance MarshalJSON Ctx ScriptOutput where
@@ -156,7 +154,7 @@ isDataCarrier _ = False
 -- | Tries to decode a 'ScriptOutput' from a 'Script'. This can fail if the
 -- script is not recognized as any of the standard output types.
 decodeOutput :: Ctx -> Script -> Either String ScriptOutput
-decodeOutput ctx s = case s.ops of
+decodeOutput ctx s = case scriptOps s of
   -- Pay to PubKey
   [OP_PUSHDATA bs _, OP_CHECKSIG] ->
     PayPK <$> unmarshal ctx bs
@@ -323,7 +321,7 @@ data SimpleInput
       { -- | embedded signature
         signature :: !TxSignature,
         -- | public key
-        key :: !PublicKey
+        inputKey :: !PublicKey
       }
   | SpendMulSig
       { -- | list of signatures
@@ -361,11 +359,11 @@ type RedeemScript = ScriptOutput
 data ScriptInput
   = RegularInput
       { -- | get wrapped simple input
-        get :: !SimpleInput
+        getScriptInput :: !SimpleInput
       }
   | ScriptHashInput
       { -- | get simple input associated with redeem script
-        get :: !SimpleInput,
+        getScriptInput :: !SimpleInput,
         -- | redeem script
         redeem :: !RedeemScript
       }
@@ -400,7 +398,7 @@ decodeInput net ctx s@(Script ops) =
     matchSimpleInput =
       RegularInput <$> eitherToMaybe (decodeSimpleInput net ctx s)
     matchPayScriptHash =
-      case splitAt (length s.ops - 1) ops of
+      case splitAt (length (scriptOps s) - 1) ops of
         (is, [OP_PUSHDATA bs _]) -> do
           rdm <- eitherToMaybe $ unmarshal ctx bs
           inp <- eitherToMaybe $ decodeSimpleInput net ctx $ Script is
@@ -420,7 +418,7 @@ encodeInput :: Network -> Ctx -> ScriptInput -> Script
 encodeInput net ctx s = case s of
   RegularInput ri -> encodeSimpleInput net ctx ri
   ScriptHashInput i o ->
-    Script $ (encodeSimpleInput net ctx i).ops ++ [opPushData $ marshal ctx o]
+    Script $ (scriptOps $ encodeSimpleInput net ctx i) ++ [opPushData $ marshal ctx o]
 
 -- | Encode a standard 'SimpleInput' into opcodes as an input 'Script'.
 encodeSimpleInput :: Network -> Ctx -> SimpleInput -> Script

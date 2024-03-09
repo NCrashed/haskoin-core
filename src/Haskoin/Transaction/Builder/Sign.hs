@@ -4,10 +4,8 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE NoFieldSelectors #-}
 
 -- |
 -- Module      : Haskoin.Transaction.Builder.Sign
@@ -64,7 +62,7 @@ data SigInput = SigInput
     script :: !ScriptOutput,
     -- | output script value
     -- ^ outpoint to spend
-    value :: !Word64,
+    sigValue :: !Word64,
     -- | outpoint to spend
     -- ^ signature type
     outpoint :: !OutPoint,
@@ -123,9 +121,9 @@ signTx ::
   Either String Tx
 signTx net ctx otx sigis allKeys
   | null ti = Left "signTx: Transaction has no inputs"
-  | otherwise = foldM go otx $ findInputIndex ((.outpoint) . fst) sigis ti
+  | otherwise = foldM go otx $ findInputIndex (outpoint . fst) sigis ti
   where
-    ti = otx.inputs
+    ti = txInputs otx
     go tx (sigi@(SigInput so _ _ _ rdmM, _), i) = do
       keys <- sigKeys ctx so rdmM allKeys
       foldM (\t k -> signInput net ctx t i sigi k) tx keys
@@ -145,15 +143,15 @@ signInput net ctx tx i (sigIn@(SigInput so val _ _ rdmM), nest) key = do
   let sig = makeSignature net ctx tx i sigIn key
   si <- buildInput net ctx tx i so val rdmM sig $ derivePublicKey ctx key
   w <- updatedWitnessData net ctx tx i so si
-  return tx {inputs = nextTxIn so si, witness = w}
+  return tx {txInputs = nextTxIn so si, txWitness = w}
   where
-    f si TxIn {..} = TxIn {script = marshal (net, ctx) si, ..}
-    g so' TxIn {..} = TxIn {script = pkScript so', ..}
+    f si TxIn {..} = TxIn {txInScript = marshal (net, ctx) si, ..}
+    g so' TxIn {..} = TxIn {txInScript = pkScript so', ..}
     pkScript so' = runPutS . serialize . opPushData $ marshal ctx so'
     nextTxIn so' si
-      | isSegwit so' && nest = updateIndex i tx.inputs (g so')
-      | isSegwit so' = tx.inputs
-      | otherwise = updateIndex i tx.inputs (f si)
+      | isSegwit so' && nest = updateIndex i (txInputs tx) (g so')
+      | isSegwit so' = (txInputs tx)
+      | otherwise = updateIndex i (txInputs tx) (f si)
 
 -- | Add the witness data of the transaction given segwit parameters for an input.
 --
@@ -170,14 +168,14 @@ updatedWitnessData net ctx tx i so si
   | isSegwit so =
       updateWitness . toWitnessStack net ctx =<< calcWitnessProgram net ctx so si
   | otherwise =
-      return tx.witness
+      return (txWitness tx)
   where
     updateWitness w
-      | null tx.witness = return $ updateIndex i defaultStack (const w)
-      | length tx.witness /= n = Left "Invalid number of witness stacks"
-      | otherwise = return $ updateIndex i tx.witness (const w)
+      | null (txWitness tx) = return $ updateIndex i defaultStack (const w)
+      | length (txWitness tx) /= n = Left "Invalid number of witness stacks"
+      | otherwise = return $ updateIndex i (txWitness tx) (const w)
     defaultStack = replicate n $ toWitnessStack net ctx EmptyWitnessProgram
-    n = length tx.inputs
+    n = length (txInputs tx)
 
 -- | Associate an input index to each value in a list
 findInputIndex ::
@@ -191,7 +189,7 @@ findInputIndex ::
 findInputIndex getOutPoint as ti =
   mapMaybe g $ zip (matchTemplate as ti f) [0 ..]
   where
-    f s txin = getOutPoint s == txin.outpoint
+    f s txin = getOutPoint s == txInOutpoint txin
     g (Just s, i) = Just (s, i)
     g (Nothing, _) = Nothing
 
@@ -223,7 +221,7 @@ sigKeys ctx so rdmM keys =
           let pub = derivePublicKey ctx prv
       ]
     keyByHash h = fmap fst . maybeToList . findKey h $ zipKeys
-    findKey h = find $ (== h) . (.hash160) . pubKeyAddr ctx . snd
+    findKey h = find $ (== h) . hash160 . pubKeyAddr ctx . snd
 
 -- | Construct an input for a transaction given a signature, public key and data
 -- about the previous output.
@@ -244,7 +242,7 @@ buildInput ::
   PublicKey ->
   Either String ScriptInput
 buildInput net ctx tx i so val rdmM sig pub = do
-  when (i >= length tx.inputs) $ Left "buildInput: Invalid input index"
+  when (i >= length (txInputs tx)) $ Left "buildInput: Invalid input index"
   case (so, rdmM) of
     (PayScriptHash _, Just rdm) ->
       buildScriptHashInput rdm
@@ -266,13 +264,13 @@ buildInput net ctx tx i so val rdmM sig pub = do
       _ -> Left "buildInput: Invalid output/redeem script combination"
     buildScriptHashInput rdm = do
       inp <- buildRegularInput rdm
-      return $ ScriptHashInput inp.get rdm
+      return $ ScriptHashInput (getScriptInput inp) rdm
     f (TxSignature x sh) p =
       verifyHashSig
         ctx
         (makeSigHash net ctx tx i so val sh rdmM)
         x
-        p.point
+        (point p)
     f TxSignatureEmpty _ = False
 
 -- | Apply heuristics to extract the signatures for a particular input that are
@@ -286,16 +284,16 @@ parseExistingSigs net ctx tx so i = insSigs <> witSigs
       Right (ScriptHashInput (SpendMulSig xs) _) -> xs
       Right (RegularInput (SpendMulSig xs)) -> xs
       _ -> []
-    scp = (tx.inputs !! i).script
+    scp = txInScript ((txInputs tx) !! i)
     witSigs
       | not $ isSegwit so = []
-      | null tx.witness = []
-      | otherwise = rights $ decodeTxSig net ctx <$> (tx.witness !! i)
+      | null (txWitness tx) = []
+      | otherwise = rights $ decodeTxSig net ctx <$> ((txWitness tx) !! i)
 
 -- | Produce a structured representation of a deterministic (RFC-6979) signature over an input.
 makeSignature :: Network -> Ctx -> Tx -> Int -> SigInput -> PrivateKey -> TxSignature
-makeSignature net ctx tx i (SigInput so val _ sh rdmM) key =
-  TxSignature (signHash ctx key.key m) sh
+makeSignature net ctx tx i (SigInput so val _ sh rdmM) pkey =
+  TxSignature (signHash ctx (key pkey) m) sh
   where
     m = makeSigHash net ctx tx i so val sh rdmM
 

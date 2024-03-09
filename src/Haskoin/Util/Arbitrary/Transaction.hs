@@ -1,6 +1,5 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE OverloadedRecordDot #-}
 
 -- |
 -- Module      : Haskoin.Test.Transaction
@@ -43,7 +42,7 @@ arbitraryTxHash = TxHash <$> arbitraryHash256
 
 -- | Arbitrary amount of Satoshi as 'Word64' (Between 1 and 21e14)
 arbitrarySatoshi :: Network -> Gen TestCoin
-arbitrarySatoshi net = TestCoin <$> choose (1, net.maxSatoshi)
+arbitrarySatoshi net = TestCoin <$> choose (1, maxSatoshi net)
 
 -- | Arbitrary 'OutPoint'.
 arbitraryOutPoint :: Gen OutPoint
@@ -84,7 +83,7 @@ arbitraryWLTx net ctx wit = do
   no <- choose (1, 5)
   inps <- vectorOf ni (arbitraryTxIn net ctx)
   outs <- vectorOf no (arbitraryTxOut net ctx)
-  let uniqueInps = nubBy (\a b -> a.outpoint == b.outpoint) inps
+  let uniqueInps = nubBy (\a b -> txInOutpoint a == txInOutpoint b) inps
   w <-
     if wit
       then vectorOf (length uniqueInps) (listOf arbitraryBS)
@@ -158,7 +157,7 @@ arbitraryAnyInput :: Network -> Ctx -> Bool -> Gen (SigInput, PrivateKey)
 arbitraryAnyInput net ctx pkh = do
   (k, p) <- arbitraryKeyPair ctx
   let out
-        | pkh = PayPKHash (pubKeyAddr ctx p).hash160
+        | pkh = PayPKHash $ hash160 (pubKeyAddr ctx p)
         | otherwise = PayPK p
   (val, op, sh) <- arbitraryInputStuff net
   return (SigInput out val op sh Nothing, k)
@@ -192,14 +191,14 @@ arbitrarySHSigInput net ctx = do
         wrapKey <$> arbitraryPKHashSigInput net ctx,
         arbitraryMSSigInput net ctx
       ]
-  let out = PayScriptHash (payToScriptAddress ctx rdm).hash160
+  let out = PayScriptHash $ hash160 (payToScriptAddress ctx rdm)
   return (SigInput out val op sh $ Just rdm, ks)
 
 arbitraryWPKHSigInput :: Network -> Ctx -> Gen (SigInput, PrivateKey)
 arbitraryWPKHSigInput net ctx = do
   (k, p) <- arbitraryKeyPair ctx
   (val, op, sh) <- arbitraryInputStuff net
-  let out = PayWitnessPKHash (pubKeyAddr ctx p).hash160
+  let out = PayWitnessPKHash $ hash160 (pubKeyAddr ctx p)
   return (SigInput out val op sh Nothing, k)
 
 arbitraryWSHSigInput :: Network -> Ctx -> Gen (SigInput, [PrivateKey])
@@ -210,7 +209,7 @@ arbitraryWSHSigInput net ctx = do
         wrapKey <$> arbitraryPKHashSigInput net ctx,
         arbitraryMSSigInput net ctx
       ]
-  let out = PayWitnessScriptHash (payToWitnessScriptAddress ctx rdm).hash256
+  let out = PayWitnessScriptHash $ hash256 (payToWitnessScriptAddress ctx rdm)
   return (SigInput out val op sh $ Just rdm, ks)
 
 -- | Arbitrary 'Tx' (empty 'TxIn'), 'SigInputs' and private keys that can be
@@ -221,8 +220,8 @@ arbitrarySigningData net ctx = do
   ni <- choose (1, 5)
   no <- choose (1, 5)
   sigis <- vectorOf ni (arbitrarySigInput net ctx)
-  let uSigis = nubBy (\(a, _) (b, _) -> a.outpoint == b.outpoint) sigis
-  inps <- forM uSigis $ \(s, _) -> TxIn s.outpoint BS.empty <$> arbitrary
+  let uSigis = nubBy (\(a, _) (b, _) -> outpoint a == outpoint b) sigis
+  inps <- forM uSigis $ \(s, _) -> TxIn (outpoint s) BS.empty <$> arbitrary
   outs <- vectorOf no (arbitraryTxOut net ctx)
   l <- arbitrary
   perm <- choose (0, length inps - 1)
@@ -248,9 +247,9 @@ arbitraryPartialTxs ::
 arbitraryPartialTxs net ctx = do
   tx <- arbitraryEmptyTx net ctx
   res <-
-    forM (map (.outpoint) tx.inputs) $ \op -> do
+    forM (map txInOutpoint (txInputs tx)) $ \op -> do
       (so, val, rdmM, prvs, m, n) <- arbitraryData
-      txs <- mapM (singleSig so val rdmM tx op . (.key)) prvs
+      txs <- mapM (singleSig so val rdmM tx op . key) prvs
       return (txs, (so, val, op, m, n))
   return (concatMap fst res, map snd res)
   where
@@ -270,7 +269,7 @@ arbitraryPartialTxs net ctx = do
       let so = PayMulSig pubKeys m
       elements
         [ (so, val, Nothing, prvKeys, m, n),
-          ( PayScriptHash (payToScriptAddress ctx so).hash160,
+          ( PayScriptHash (hash160 $ payToScriptAddress ctx so),
             val,
             Just so,
             prvKeys,

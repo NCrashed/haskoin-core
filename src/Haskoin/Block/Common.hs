@@ -3,7 +3,6 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE NoFieldSelectors #-}
 
 -- |
 -- Module      : Haskoin.Block.Common
@@ -269,7 +268,7 @@ type BlockLocator = [BlockHash]
 -- block hash, at at the tip of the chain, or after 500 entries, whichever comes
 -- earlier.
 data GetBlocks = GetBlocks
-  { version :: !Word32,
+  { getBlocksVersion :: !Word32,
     -- | block locator object
     locator :: !BlockLocator,
     -- | hash of the last desired block
@@ -301,7 +300,7 @@ instance Serialize GetBlocks where
 -- returned. 'GetHeaders' is used by simplified payment verification (SPV)
 -- clients to exclude block contents when synchronizing the block chain.
 data GetHeaders = GetHeaders
-  { version :: !Word32,
+  { getHeadersVersion :: !Word32,
     -- | block locator object
     locator :: !BlockLocator,
     -- | hash of the last desired block header
@@ -338,7 +337,7 @@ type BlockHeaderCount = (BlockHeader, VarInt)
 -- response to a 'GetHeaders' message.
 newtype Headers = Headers
   { -- | list of block headers with transaction count
-    list :: [BlockHeaderCount]
+    listHeaders :: [BlockHeaderCount]
   }
   deriving (Eq, Show, Read, Generic, NFData)
 

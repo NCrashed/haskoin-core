@@ -6,9 +6,7 @@
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE NoFieldSelectors #-}
 
 -- |
 -- Module      : Haskoin.Address
@@ -195,22 +193,22 @@ instance MarshalJSON Network Address where
 -- 'CashAddr' depending on network.
 addrToText :: Network -> Address -> Maybe Text
 addrToText net a@PubKeyAddress {hash160 = h}
-  | isNothing net.cashAddrPrefix =
+  | isNothing (cashAddrPrefix net) =
       Just . encodeBase58Check . runPutS $ base58put net a
   | otherwise = cashAddrEncode net 0 (runPutS $ serialize h)
 addrToText net a@ScriptAddress {hash160 = h}
-  | isNothing net.cashAddrPrefix =
+  | isNothing (cashAddrPrefix net) =
       Just . encodeBase58Check . runPutS $ base58put net a
   | otherwise =
       cashAddrEncode net 1 (runPutS $ serialize h)
 addrToText net WitnessPubKeyAddress {hash160 = h} = do
-  hrp <- net.bech32Prefix
+  hrp <- bech32Prefix net
   segwitEncode hrp 0 (B.unpack (runPutS $ serialize h))
 addrToText net WitnessScriptAddress {hash256 = h} = do
-  hrp <- net.bech32Prefix
+  hrp <- bech32Prefix net
   segwitEncode hrp 0 (B.unpack (runPutS $ serialize h))
 addrToText net WitnessAddress {version = v, bytes = d} = do
-  hrp <- net.bech32Prefix
+  hrp <- bech32Prefix net
   segwitEncode hrp v (B.unpack d)
 
 -- | Parse 'Base58', 'Bech32' or 'CashAddr' address, depending on network.
@@ -228,7 +226,7 @@ cashToAddr net txt = do
 
 bech32ToAddr :: Network -> Text -> Maybe Address
 bech32ToAddr net txt = do
-  hrp <- net.bech32Prefix
+  hrp <- bech32Prefix net
   (ver, bs) <- second B.pack <$> segwitDecode hrp txt
   case ver of
     0 -> case B.length bs of
@@ -248,16 +246,16 @@ base58get net = do
   f pfx addr
   where
     f x a
-      | x == net.addrPrefix = return $ PubKeyAddress a
-      | x == net.scriptPrefix = return $ ScriptAddress a
+      | x == addrPrefix net = return $ PubKeyAddress a
+      | x == scriptPrefix net = return $ ScriptAddress a
       | otherwise = fail "Does not recognize address prefix"
 
 base58put :: (MonadPut m) => Network -> Address -> m ()
 base58put net (PubKeyAddress h) = do
-  putWord8 net.addrPrefix
+  putWord8 $ addrPrefix net
   serialize h
 base58put net (ScriptAddress h) = do
-  putWord8 net.scriptPrefix
+  putWord8 $ scriptPrefix net
   serialize h
 base58put _ _ = error "Cannot serialize this address as Base58"
 

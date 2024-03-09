@@ -1,8 +1,6 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE NoFieldSelectors #-}
 
 -- |
 -- Module      : Haskoin.Address.CashAddr
@@ -78,7 +76,7 @@ base32char = fmap fromIntegral . (`elemIndex` charset)
 -- provided 'Network'. Prefix may be omitted from the string.
 cashAddrDecode :: Network -> CashAddr -> Maybe (CashVersion, ByteString)
 cashAddrDecode net ca = do
-  epfx <- net.cashAddrPrefix
+  epfx <- cashAddrPrefix net
   let (cpfx, cdat) = T.breakOnEnd ":" (T.toLower ca)
   guard (T.null cpfx || T.init cpfx == epfx)
   (dpfx, ver, bs) <- cash32decodeType (epfx <> ":" <> cdat)
@@ -89,7 +87,7 @@ cashAddrDecode net ca = do
 -- Fails if the 'CashVersion' or length of hash 'ByteString' is invalid.
 cashAddrEncode :: Network -> CashVersion -> ByteString -> Maybe CashAddr
 cashAddrEncode net cv bs = do
-  pfx <- net.cashAddrPrefix
+  pfx <- cashAddrPrefix net
   cash32encodeType pfx cv bs
 
 -- | Mid-Level: decode 'CashAddr' string containing arbitrary prefix, plus a

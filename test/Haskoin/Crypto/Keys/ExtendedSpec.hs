@@ -1,6 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 
@@ -341,11 +340,11 @@ runVector ctx m v = do
   assertBool "bip44Addr" $
     addrToText btc (xPubAddr ctx $ deriveXPubKey ctx $ derivePath ctx bip44Addr m)
       == Just (v !! 3)
-  assertBool "prvKey" $ encodeHex m.key.get == v !! 4
+  assertBool "prvKey" $ encodeHex (getSecKey . privKey $ m) == v !! 4
   assertBool "xPrvWIF" $ xPrvWif btc m == v !! 5
   assertBool "pubKey" $
-    encodeHex (exportPubKey ctx True (deriveXPubKey ctx m).key) == v !! 6
-  assertBool "chain code" $ encodeHex (runPutS (serialize m.chain)) == v !! 7
+    encodeHex (exportPubKey ctx True (xpubKey $ deriveXPubKey ctx m)) == v !! 6
+  assertBool "chain code" $ encodeHex (runPutS (serialize $ privChain m)) == v !! 7
   assertBool "Hex PubKey" $
     encodeHex (marshal (btc, ctx) (deriveXPubKey ctx m)) == v !! 8
   assertBool "Hex PrvKey" $ encodeHex (marshal btc m) == v !! 9
@@ -362,10 +361,10 @@ genVector ctx m =
       fromJust $
         addrToText btc (xPubAddr ctx $ deriveXPubKey ctx $ derivePath ctx bip44Addr m)
     ),
-    ("prvKey", encodeHex m.key.get),
+    ("prvKey", encodeHex $ getSecKey . privKey $ m),
     ("xPrvWIF", xPrvWif btc m),
-    ("pubKey", encodeHex (exportPubKey ctx True (deriveXPubKey ctx m).key)),
-    ("chain code", encodeHex ((runPutS . serialize) m.chain)),
+    ("pubKey", encodeHex (exportPubKey ctx True (xpubKey $ deriveXPubKey ctx m))),
+    ("chain code", encodeHex ((runPutS . serialize) $ privChain m)),
     ("Hex PubKey", encodeHex (marshal (btc, ctx) (deriveXPubKey ctx m))),
     ("Hex PrvKey", encodeHex (marshal btc m))
   ]
@@ -376,7 +375,7 @@ parseVector ctx mTxt vs =
   where
     mast = makeXPrvKey $ fromJust $ decodeHex mTxt
     go (d : vec) =
-      let deriv = ((.get) . fromJust . parsePath) (cs d)
+      let deriv = (getParsedPath . fromJust . parsePath) (cs d)
        in (d, derivePath ctx deriv mast, vec)
     go _ = undefined
 

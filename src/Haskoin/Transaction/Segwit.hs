@@ -2,7 +2,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
-{-# LANGUAGE NoFieldSelectors #-}
 
 -- |
 -- Module      : Haskoin.Transaction.Segwit
@@ -78,7 +77,7 @@ toWitnessStack net ctx = \case
 -- @since 0.11.0.0
 data WitnessProgramPKH = WitnessProgramPKH
   { signature :: !TxSignature,
-    key :: !PublicKey
+    witnessProgramPKHKey :: !PublicKey
   }
   deriving (Eq)
 
@@ -87,7 +86,7 @@ data WitnessProgramPKH = WitnessProgramPKH
 -- @since 0.11.0.0
 data WitnessProgramSH = WitnessProgramSH
   { stack :: ![ByteString],
-    script :: !Script
+    witnessProgramSHScript :: !Script
   }
   deriving (Eq, Show)
 

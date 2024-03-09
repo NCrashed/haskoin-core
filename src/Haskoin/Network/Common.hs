@@ -5,7 +5,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE NoFieldSelectors #-}
 
 -- |
 -- Module      : Haskoin.Network.Common
@@ -77,7 +76,7 @@ type NetworkAddressTime = (Word32, NetworkAddress)
 -- type is sent inside a 'Message' as a response to a 'GetAddr' message.
 newtype Addr = Addr
   { -- List of addresses of other nodes on the network with timestamps.
-    list :: [NetworkAddressTime]
+    listAddr :: [NetworkAddressTime]
   }
   deriving (Eq, Show, Generic)
   deriving newtype (NFData)
@@ -132,7 +131,7 @@ instance Serialize Alert where
 -- message that contains unknown object hashes.
 newtype GetData = GetData
   { -- | list of object hashes
-    list :: [InvVector]
+    listGetData :: [InvVector]
   }
   deriving (Eq, Show, Generic)
   deriving newtype (NFData)
@@ -159,7 +158,7 @@ instance Serialize GetData where
 -- unsolicited or in response to a 'GetBlocks' message.
 newtype Inv = Inv
   { -- | inventory
-    list :: [InvVector]
+    listInv :: [InvVector]
   }
   deriving (Eq, Show, Generic)
   deriving newtype (NFData)
@@ -344,7 +343,7 @@ instance Serialize NetworkAddress where
 -- memory pool of the receiving node.
 newtype NotFound = NotFound
   { -- | Inventory vectors related to this request
-    list :: [InvVector]
+    listNotFound :: [InvVector]
   }
   deriving (Eq, Show, Generic)
   deriving newtype (NFData)
@@ -566,7 +565,7 @@ instance Serialize VarString where
 -- will similarly respond with it's own 'Version' message.
 data Version = Version
   { -- | protocol version
-    version :: !Word32,
+    protocolVersion :: !Word32,
     -- | features supported by this connection
     services :: !Word64,
     -- | unix timestamp

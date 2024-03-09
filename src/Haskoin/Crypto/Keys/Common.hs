@@ -6,9 +6,7 @@
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE NoFieldSelectors #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 -- |
@@ -70,10 +68,12 @@ import Haskoin.Crypto.Hash
 import Haskoin.Network.Data
 import Haskoin.Util
 
+import Debug.Trace 
+
 -- | Elliptic curve public key type with expected serialized compression flag.
 data PublicKey = PublicKey
   { point :: !PubKey,
-    compress :: !Bool
+    pkCompress :: !Bool
   }
   deriving (Generic, Show, Read, Hashable, Eq, NFData)
 
@@ -102,7 +102,7 @@ instance Marshal Ctx PublicKey where
       Just k -> return $ PublicKey k c
 
   marshalPut ctx pk =
-    putByteString $ exportPubKey ctx pk.compress pk.point
+    putByteString $ exportPubKey ctx (pkCompress pk) $ point pk
 
 -- | Wrap a public key from secp256k1 library adding information about compression.
 wrapPubKey :: Bool -> PubKey -> PublicKey
@@ -124,18 +124,18 @@ tweakPubKey ctx p =
 -- public key.
 data PrivateKey = PrivateKey
   { key :: !SecKey,
-    compress :: !Bool
+    prvCompress :: !Bool
   }
   deriving (Eq, Show, Read, Generic, NFData)
 
 instance Serial PrivateKey where
   serialize p = do
-    putByteString p.key.get
-    serialize p.compress
+    putByteString (getSecKey . key $ p)
+    serialize $ prvCompress p
   deserialize = do
     k <- getByteString 32
     c <- deserialize
-    return PrivateKey {key = SecKey k, compress = c}
+    return PrivateKey {key = SecKey k, prvCompress = c}
 
 instance MarshalJSON Network PrivateKey where
   marshalValue net = String . toWif net
@@ -166,11 +166,15 @@ fromMiniKey bs = do
 fromWif :: Network -> Base58 -> Maybe PrivateKey
 fromWif net wif = do
   bs <- decodeBase58Check wif
+  traceM $ "Decoded bs: " ++ show (encodeHex bs)
   -- Check that this is a private key
-  guard (BS.head bs == net.secretPrefix)
+  guard (BS.head bs == secretPrefix net)
   case BS.length bs of
     -- Uncompressed format
-    33 -> wrapSecKey False <$> (secKey . BS.tail) bs
+    33 -> do 
+      traceM $ "Uncompressed': " ++ show ((encodeHex . BS.init) bs)
+      traceM $ "Uncompressed:  " ++ show ((secKey . BS.tail) bs)
+      wrapSecKey False <$> (secKey . BS.tail) bs
     -- Compressed format
     34 -> do
       guard $ BS.last bs == 0x01
@@ -181,5 +185,5 @@ fromWif net wif = do
 -- | Encode private key into a WIF string.
 toWif :: Network -> PrivateKey -> Base58
 toWif net (PrivateKey k c) =
-  encodeBase58Check . BS.cons net.secretPrefix $
-    if c then k.get `BS.snoc` 0x01 else k.get
+  encodeBase58Check . BS.cons (secretPrefix net) $
+    if c then getSecKey k `BS.snoc` 0x01 else getSecKey k

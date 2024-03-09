@@ -4,9 +4,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE NoFieldSelectors #-}
 
 -- |
 -- Module      : Haskoin.Crypto.Hash
@@ -20,10 +18,10 @@
 -- cryptonite library.
 module Haskoin.Crypto.Hash
   ( -- * Hashes
-    Hash512 (get),
-    Hash256 (get),
-    Hash160 (get),
-    CheckSum32 (get),
+    Hash512 (getHash512),
+    Hash256 (getHash256),
+    Hash160 (getHash160),
+    CheckSum32 (getCheckSum32),
     sha512,
     sha256,
     ripemd160,
@@ -65,7 +63,7 @@ import Text.Read as R
 
 -- | 'Word32' wrapped for type-safe 32-bit checksums.
 newtype CheckSum32 = CheckSum32
-  { get :: Word32
+  { getCheckSum32 :: Word32
   }
   deriving (Eq, Ord, Show, Read, Generic)
   deriving newtype (Hashable, NFData)
@@ -83,22 +81,22 @@ instance Binary CheckSum32 where
   get = deserialize
 
 -- | Type for 512-bit hashes.
-newtype Hash512 = Hash512 {get :: ShortByteString}
+newtype Hash512 = Hash512 {getHash512 :: ShortByteString}
   deriving (Eq, Ord, Generic)
   deriving newtype (Hashable, NFData)
 
 -- | Type for 256-bit hashes.
-newtype Hash256 = Hash256 {get :: ShortByteString}
+newtype Hash256 = Hash256 {getHash256 :: ShortByteString}
   deriving (Eq, Ord, Generic)
   deriving newtype (Hashable, NFData)
 
 -- | Type for 160-bit hashes.
-newtype Hash160 = Hash160 {get :: ShortByteString}
+newtype Hash160 = Hash160 {getHash160 :: ShortByteString}
   deriving (Eq, Ord, Generic)
   deriving newtype (Hashable, NFData)
 
 instance Show Hash512 where
-  showsPrec _ = shows . encodeHex . fromShort . (.get)
+  showsPrec _ = shows . encodeHex . fromShort . getHash512
 
 instance Read Hash512 where
   readPrec = do
@@ -106,7 +104,7 @@ instance Read Hash512 where
     maybe pfail (return . Hash512 . toShort) (decodeHex (cs str))
 
 instance Show Hash256 where
-  showsPrec _ = shows . encodeHex . fromShort . (.get)
+  showsPrec _ = shows . encodeHex . fromShort . getHash256
 
 instance Read Hash256 where
   readPrec = do
@@ -114,7 +112,7 @@ instance Read Hash256 where
     maybe pfail (return . Hash256 . toShort) (decodeHex (cs str))
 
 instance Show Hash160 where
-  showsPrec _ = shows . encodeHex . fromShort . (.get)
+  showsPrec _ = shows . encodeHex . fromShort . getHash160
 
 instance Read Hash160 where
   readPrec = do
@@ -134,7 +132,7 @@ instance IsString Hash512 where
 
 instance Serial Hash512 where
   deserialize = Hash512 . toShort <$> getByteString 64
-  serialize = putByteString . fromShort . (.get)
+  serialize = putByteString . fromShort . getHash512
 
 instance Serialize Hash512 where
   put = serialize
@@ -157,7 +155,7 @@ instance IsString Hash256 where
 
 instance Serial Hash256 where
   deserialize = Hash256 . toShort <$> getByteString 32
-  serialize = putByteString . fromShort . (.get)
+  serialize = putByteString . fromShort . getHash256
 
 instance Serialize Hash256 where
   put = serialize
@@ -180,7 +178,7 @@ instance IsString Hash160 where
 
 instance Serial Hash160 where
   deserialize = Hash160 . toShort <$> getByteString 20
-  serialize = putByteString . fromShort . (.get)
+  serialize = putByteString . fromShort . getHash160
 
 instance Serialize Hash160 where
   put = serialize
@@ -245,11 +243,11 @@ split512 :: Hash512 -> (Hash256, Hash256)
 split512 h =
   (Hash256 (toShort a), Hash256 (toShort b))
   where
-    (a, b) = B.splitAt 32 $ fromShort h.get
+    (a, b) = B.splitAt 32 $ fromShort $ getHash512 h
 
 -- | Join a pair of 'Hash256' into a 'Hash512'.
 join512 :: (Hash256, Hash256) -> Hash512
-join512 (a, b) = Hash512 (toShort (a.get `app` b.get))
+join512 (a, b) = Hash512 (toShort (getHash256 a `app` getHash256 b))
   where
     app = B.append `on` fromShort
 

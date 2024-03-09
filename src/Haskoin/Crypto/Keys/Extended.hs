@@ -8,9 +8,7 @@
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE NoFieldSelectors #-}
 
 -- |
 -- Module      : Haskoin.Keys.Extended
@@ -187,22 +185,22 @@ type KeyIndex = Word32
 -- parent node and an index to differentiate it from other siblings.
 data XPrvKey = XPrvKey
   { -- | depth in the tree
-    depth :: !Word8,
+    privDepth :: !Word8,
     -- | fingerprint of parent
-    parent :: !Fingerprint,
+    privParent :: !Fingerprint,
     -- | derivation index
-    index :: !KeyIndex,
+    privIndex :: !KeyIndex,
     -- | chain code
-    chain :: !ChainCode,
+    privChain :: !ChainCode,
     -- | private key of this node
-    key :: !SecKey
+    privKey :: !SecKey
   }
   deriving (Generic, Eq, Show, Read, NFData, Hashable)
 
 instance Marshal Network XPrvKey where
   marshalGet net = do
     ver <- getWord32be
-    unless (ver == net.xPrvPrefix) $
+    unless (ver == xPrvPrefix net) $
       fail "Get: Invalid version for extended private key"
     XPrvKey
       <$> getWord8
@@ -212,12 +210,12 @@ instance Marshal Network XPrvKey where
       <*> getPadPrvKey
 
   marshalPut net k = do
-    putWord32be net.xPrvPrefix
-    putWord8 k.depth
-    serialize k.parent
-    putWord32be k.index
-    serialize $ k.chain
-    putPadPrvKey k.key
+    putWord32be $ xPrvPrefix net
+    putWord8 $ privDepth k
+    serialize $ privParent k
+    putWord32be $ privIndex k
+    serialize $ privChain k
+    putPadPrvKey $ privKey k
 
 instance MarshalJSON Network XPrvKey where
   marshalValue net = Aeson.String . xPrvExport net
@@ -233,22 +231,22 @@ instance MarshalJSON Network XPrvKey where
 -- | Data type representing an extended BIP32 public key.
 data XPubKey = XPubKey
   { -- | depth in the tree
-    depth :: !Word8,
+    xpubDepth :: !Word8,
     -- | fingerprint of parent
-    parent :: !Fingerprint,
+    xpubParent :: !Fingerprint,
     -- | derivation index
-    index :: !KeyIndex,
+    xpubIndex :: !KeyIndex,
     -- | chain code
-    chain :: !ChainCode,
+    xpubChain :: !ChainCode,
     -- | public key of this node
-    key :: !PubKey
+    xpubKey :: !PubKey
   }
   deriving (Generic, Eq, Show, Read, Hashable, NFData)
 
 instance Marshal (Network, Ctx) XPubKey where
   marshalGet (net, ctx) = do
     ver <- getWord32be
-    unless (ver == net.xPubPrefix) $
+    unless (ver == xPubPrefix net) $
       fail "Get: Invalid version for extended public key"
     XPubKey
       <$> getWord8
@@ -258,12 +256,12 @@ instance Marshal (Network, Ctx) XPubKey where
       <*> ((\PublicKey {point} -> point) <$> marshalGet ctx)
 
   marshalPut (net, ctx) k = do
-    putWord32be net.xPubPrefix
-    putWord8 k.depth
-    serialize k.parent
-    putWord32be k.index
-    serialize k.chain
-    marshalPut ctx $ wrapPubKey True k.key
+    putWord32be $ xPubPrefix net
+    putWord8 $ xpubDepth k
+    serialize $ xpubParent k
+    putWord32be $ xpubIndex k
+    serialize $ xpubChain k
+    marshalPut ctx $ wrapPubKey True $ xpubKey k
 
 instance MarshalJSON (Network, Ctx) XPubKey where
   unmarshalValue (net, ctx) =
@@ -311,13 +309,13 @@ prvSubKey ::
   XPrvKey
 prvSubKey ctx xkey child
   | child >= 0 && child < 0x80000000 =
-      XPrvKey (xkey.depth + 1) (xPrvFP ctx xkey) child c k
+      XPrvKey (privDepth xkey + 1) (xPrvFP ctx xkey) child c k
   | otherwise = error "Invalid child derivation index"
   where
-    pK = (deriveXPubKey ctx xkey).key
+    pK = xpubKey (deriveXPubKey ctx xkey)
     m = B.append (exportPubKey ctx True pK) (runPutS (serialize child))
-    (a, c) = split512 $ hmac512 (runPutS $ serialize xkey.chain) m
-    k = fromMaybe err $ tweakSecKey ctx xkey.key a
+    (a, c) = split512 $ hmac512 (runPutS $ serialize $ privChain xkey) m
+    k = fromMaybe err $ tweakSecKey ctx (privKey xkey) a
     err = throw $ DerivationException "Invalid prvSubKey derivation"
 
 -- | Compute a public, soft child key derivation. Given a parent key /M/
@@ -332,12 +330,12 @@ pubSubKey ::
   XPubKey
 pubSubKey ctx xKey child
   | child >= 0 && child < 0x80000000 =
-      XPubKey (xKey.depth + 1) (xPubFP ctx xKey) child c pK
+      XPubKey (xpubDepth xKey + 1) (xPubFP ctx xKey) child c pK
   | otherwise = error "Invalid child derivation index"
   where
-    m = B.append (exportPubKey ctx True xKey.key) (runPutS $ serialize child)
-    (a, c) = split512 $ hmac512 (runPutS $ serialize xKey.chain) m
-    pK = fromMaybe err $ tweakPubKey ctx xKey.key a
+    m = B.append (exportPubKey ctx True (xpubKey xKey)) (runPutS $ serialize child)
+    (a, c) = split512 $ hmac512 (runPutS $ serialize $ xpubChain xKey) m
+    pK = fromMaybe err $ tweakPubKey ctx (xpubKey xKey) a
     err = throw $ DerivationException "Invalid pubSubKey derivation"
 
 -- | Compute a hard child key derivation. Hard derivations can only be computed
@@ -356,34 +354,34 @@ hardSubKey ::
   XPrvKey
 hardSubKey ctx xkey child
   | child >= 0 && child < 0x80000000 =
-      XPrvKey (xkey.depth + 1) (xPrvFP ctx xkey) i c k
+      XPrvKey (privDepth xkey + 1) (xPrvFP ctx xkey) i c k
   | otherwise = error "Invalid child derivation index"
   where
     i = setBit child 31
-    m = B.append (bsPadPrvKey xkey.key) (runPutS $ serialize i)
-    (a, c) = split512 $ hmac512 (runPutS $ serialize xkey.chain) m
-    k = fromMaybe err $ tweakSecKey ctx xkey.key a
+    m = B.append (bsPadPrvKey (privKey xkey)) (runPutS $ serialize i)
+    (a, c) = split512 $ hmac512 (runPutS $ serialize $ privChain xkey) m
+    k = fromMaybe err $ tweakSecKey ctx (privKey xkey) a
     err = throw $ DerivationException "Invalid hardSubKey derivation"
 
 -- | Returns true if the extended private key was derived through a hard
 -- derivation.
 xPrvIsHard :: XPrvKey -> Bool
-xPrvIsHard k = testBit k.index 31
+xPrvIsHard k = testBit (privIndex k) 31
 
 -- | Returns true if the extended public key was derived through a hard
 -- derivation.
 xPubIsHard :: XPubKey -> Bool
-xPubIsHard k = testBit k.index 31
+xPubIsHard k = testBit (xpubIndex k) 31
 
 -- | Returns the derivation index of this extended private key without the hard
 -- bit set.
 xPrvChild :: XPrvKey -> KeyIndex
-xPrvChild k = clearBit k.index 31
+xPrvChild k = clearBit (privIndex k) 31
 
 -- | Returns the derivation index of this extended public key without the hard
 -- bit set.
 xPubChild :: XPubKey -> KeyIndex
-xPubChild k = clearBit k.index 31
+xPubChild k = clearBit (xpubIndex k) 31
 
 -- | Computes the key identifier of an extended private key.
 xPrvID :: Ctx -> XPrvKey -> Hash160
@@ -397,7 +395,7 @@ xPubID ctx =
     . serialize
     . sha256
     . exportPubKey ctx True
-    . (.key)
+    . xpubKey
 
 -- | Computes the key fingerprint of an extended private key.
 xPrvFP :: Ctx -> XPrvKey -> Fingerprint
@@ -425,18 +423,18 @@ xPubFP ctx =
 
 -- | Compute a standard P2PKH address for an extended public key.
 xPubAddr :: Ctx -> XPubKey -> Address
-xPubAddr ctx xkey = pubKeyAddr ctx (wrapPubKey True xkey.key)
+xPubAddr ctx xkey = pubKeyAddr ctx (wrapPubKey True (xpubKey xkey))
 
 -- | Compute a SegWit P2WPKH address for an extended public key.
 xPubWitnessAddr :: Ctx -> XPubKey -> Address
 xPubWitnessAddr ctx xkey =
-  pubKeyWitnessAddr ctx (wrapPubKey True xkey.key)
+  pubKeyWitnessAddr ctx (wrapPubKey True (xpubKey xkey))
 
 -- | Compute a backwards-compatible SegWit P2SH-P2WPKH address for an extended
 -- public key.
 xPubCompatWitnessAddr :: Ctx -> XPubKey -> Address
 xPubCompatWitnessAddr ctx xkey =
-  pubKeyCompatWitnessAddr ctx (wrapPubKey True xkey.key)
+  pubKeyCompatWitnessAddr ctx (wrapPubKey True (xpubKey xkey))
 
 -- | Exports an extended private key to the BIP32 key export format ('Base58').
 xPrvExport :: Network -> XPrvKey -> Base58
@@ -460,7 +458,7 @@ xPubImport net ctx =
 
 -- | Export an extended private key to WIF (Wallet Import Format).
 xPrvWif :: Network -> XPrvKey -> Base58
-xPrvWif net xkey = toWif net (wrapSecKey True xkey.key)
+xPrvWif net xkey = toWif net (wrapSecKey True $ privKey xkey)
 
 {- Derivation helpers -}
 
@@ -482,14 +480,14 @@ hardSubKeys ctx k = map (\i -> (hardSubKey ctx k i, i)) . cycleIndex
 -- | Derive a standard address from an extended public key and an index.
 deriveAddr :: Ctx -> XPubKey -> KeyIndex -> (Address, PubKey)
 deriveAddr ctx k i =
-  (xPubAddr ctx key, key.key)
+  (xPubAddr ctx key, xpubKey key)
   where
     key = pubSubKey ctx k i
 
 -- | Derive a SegWit P2WPKH address from an extended public key and an index.
 deriveWitnessAddr :: Ctx -> XPubKey -> KeyIndex -> (Address, PubKey)
 deriveWitnessAddr ctx k i =
-  (xPubWitnessAddr ctx key, key.key)
+  (xPubWitnessAddr ctx key, xpubKey key)
   where
     key = pubSubKey ctx k i
 
@@ -497,7 +495,7 @@ deriveWitnessAddr ctx k i =
 -- public key and an index.
 deriveCompatWitnessAddr :: Ctx -> XPubKey -> KeyIndex -> (Address, PubKey)
 deriveCompatWitnessAddr ctx k i =
-  (xPubCompatWitnessAddr ctx key, key.key)
+  (xPubCompatWitnessAddr ctx key, xpubKey key)
   where
     key = pubSubKey ctx k i
 
@@ -535,7 +533,7 @@ deriveMSAddr ::
 deriveMSAddr ctx keys m i = (payToScriptAddress ctx rdm, rdm)
   where
     rdm = sortMulSig ctx $ PayMulSig k m
-    k = map (wrapPubKey True . (.key) . flip (pubSubKey ctx) i) keys
+    k = map (wrapPubKey True . xpubKey . flip (pubSubKey ctx) i) keys
 
 -- | Cyclic list of all multisig addresses derived from a list of public keys,
 -- a number of required signatures /m/ and starting from an offset index. The
@@ -777,7 +775,7 @@ instance Read DerivPath where
   readPrec = parens $ do
     Ident "DerivPath" <- lexP
     Read.String str <- lexP
-    maybe pfail (return . (.get)) (parsePath str)
+    maybe pfail (return . getParsedPath) (parsePath str)
 
 instance Show HardPath where
   showsPrec d p =
@@ -809,7 +807,7 @@ instance IsString ParsedPath where
 
 instance IsString DerivPath where
   fromString =
-    (.get) . fromMaybe e . parsePath
+    getParsedPath . fromMaybe e . parsePath
     where
       e = error "Could not parse derivation path"
 
@@ -832,7 +830,7 @@ instance FromJSON ParsedPath where
 
 instance FromJSON DerivPath where
   parseJSON = withText "DerivPath" $ \str -> case parsePath $ cs str of
-    Just p -> return p.get
+    Just p -> return $ getParsedPath p
     _ -> mzero
 
 instance FromJSON HardPath where
@@ -862,9 +860,9 @@ instance ToJSON ParsedPath where
 -- | Type for parsing derivation paths of the form /m\/1\/2'\/3/ or
 -- /M\/1\/2'\/3/.
 data ParsedPath
-  = ParsedPrv {get :: !DerivPath}
-  | ParsedPub {get :: !DerivPath}
-  | ParsedEmpty {get :: !DerivPath}
+  = ParsedPrv {getParsedPath :: !DerivPath}
+  | ParsedPub {getParsedPath :: !DerivPath}
+  | ParsedEmpty {getParsedPath :: !DerivPath}
   deriving (Eq, Generic, NFData)
 
 instance Show ParsedPath where
@@ -951,11 +949,11 @@ is31Bit i = i >= 0 && i < 0x80000000
 
 -- | Helper function to parse a hard path.
 parseHard :: String -> Maybe HardPath
-parseHard = toHard . (.get) <=< parsePath
+parseHard = toHard . getParsedPath <=< parsePath
 
 -- | Helper function to parse a soft path.
 parseSoft :: String -> Maybe SoftPath
-parseSoft = toSoft . (.get) <=< parsePath
+parseSoft = toSoft . getParsedPath <=< parsePath
 
 -- | Data type representing a private or public key with its respective network.
 data XKey
@@ -985,8 +983,8 @@ applyPath ctx path key =
     (ParsedEmpty _, XPrv k n) -> return $ XPrv (derivPrvF k) n
     (ParsedEmpty _, XPub k n) -> derivPubFE >>= \f -> return $ XPub (f k) n
   where
-    derivPrvF = goPrv id path.get
-    derivPubFE = goPubE id path.get
+    derivPrvF = goPrv id $ getParsedPath path
+    derivPubFE = goPubE id $ getParsedPath path
     -- Build the full private derivation function starting from the end
     goPrv f p =
       case p of
@@ -1051,7 +1049,7 @@ getPadPrvKey = do
 
 -- | Serialize HDW-specific private key.
 putPadPrvKey :: (MonadPut m) => SecKey -> m ()
-putPadPrvKey p = putWord8 0x00 >> putByteString p.get
+putPadPrvKey p = putWord8 0x00 >> putByteString (getSecKey p)
 
 bsPadPrvKey :: SecKey -> ByteString
 bsPadPrvKey = runPutS . putPadPrvKey

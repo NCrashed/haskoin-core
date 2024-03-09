@@ -1,7 +1,6 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
@@ -71,49 +70,49 @@ spec = prepareContext $ \ctx ->
 vec2Test :: Ctx -> Assertion
 vec2Test ctx = do
   psbt <- decodeHexPSBTM ctx "Cannot parse validVec2" validVec2Hex
-  assertEqual "2 inputs" 2 (length psbt.inputs)
-  assertEqual "2 outputs" 2 (length psbt.outputs)
-  assertBool "final script sig" $ isJust (head psbt.inputs).finalScriptSig
+  assertEqual "2 inputs" 2 (length $ inputs psbt)
+  assertEqual "2 outputs" 2 (length $ outputs psbt)
+  assertBool "final script sig" $ isJust (finalScriptSig . head $ inputs psbt)
 
-  let rdmScript = fromJust (psbt.inputs !! 1).inputRedeemScript
+  let rdmScript = fromJust (inputRedeemScript $ inputs psbt !! 1)
   assertBool "p2wpkh" $ (isPayWitnessPKHash <$> decodeOutput ctx rdmScript) == Right True
 
-  let scrptPubKey = witnessScriptPubKey ctx (psbt.inputs !! 1)
+  let scrptPubKey = witnessScriptPubKey ctx (inputs psbt !! 1)
       rdmScriptP2SH = toP2SH rdmScript
   assertEqual "redeem script pubkey equal" rdmScriptP2SH scrptPubKey
   assertEqual "expected redeem script" (expectedOut ctx) rdmScriptP2SH
 
-  mapM_ (assertEqual "outputs are empty" emptyOutput) psbt.outputs
+  mapM_ (assertEqual "outputs are empty" emptyOutput) $ outputs psbt
 
 vec3Test :: Ctx -> Assertion
 vec3Test ctx = do
   psbt <- decodeHexPSBTM ctx "Cannot parse validVec3" validVec3Hex
-  assertEqual "1 input" 1 (length psbt.inputs)
-  assertEqual "2 outputs" 2 (length psbt.outputs)
-  let (txInput : _) = psbt.unsignedTransaction.inputs
-      (firstInput : _) = psbt.inputs
-      Just utx = firstInput.nonWitnessUtxo
-      OutPoint prevHash prevVOut = txInput.outpoint
+  assertEqual "1 input" 1 (length $ inputs psbt)
+  assertEqual "2 outputs" 2 (length $ outputs psbt)
+  let (txInput : _) = (txInputs . unsignedTransaction $ psbt)
+      (firstInput : _) = inputs psbt
+      Just utx = nonWitnessUtxo firstInput
+      OutPoint prevHash prevVOut = txInOutpoint txInput
   assertEqual "txids of inputs match" prevHash (txHash utx)
   let prevOutputKey =
         fromRight (error "Could not decode key")
           . unmarshal ctx
-          . (.script)
-          $ utx.outputs !! fromIntegral prevVOut
+          . txOutScript
+          $ (txOutputs utx) !! fromIntegral prevVOut
   assertBool "p2pkh" $ isPayPKHash prevOutputKey
-  assertEqual "sighash type" sigHashAll (fromJust firstInput.sigHashType)
+  assertEqual "sighash type" sigHashAll (fromJust $ sigHashType firstInput)
 
 vec4Test :: Ctx -> Assertion
 vec4Test ctx = do
   psbt <- decodeHexPSBTM ctx "Cannot parse validVec4" validVec4Hex
-  assertEqual "2 inputs" 2 (length psbt.inputs)
-  assertEqual "2 outputs" 2 (length psbt.outputs)
-  let (firstInput : _) = psbt.inputs
-      (_ : secondInput : _) = psbt.inputs
-  assertEqual "first input not final script sig" Nothing firstInput.finalScriptSig
-  assertEqual "second input not final script sig" Nothing secondInput.finalScriptSig
+  assertEqual "2 inputs" 2 (length $ inputs psbt)
+  assertEqual "2 outputs" 2 (length $ outputs psbt)
+  let (firstInput : _) = inputs psbt
+      (_ : secondInput : _) = inputs psbt
+  assertEqual "first input not final script sig" Nothing $ finalScriptSig firstInput
+  assertEqual "second input not final script sig" Nothing $ finalScriptSig secondInput
 
-  let Just rdmScript = secondInput.inputRedeemScript
+  let Just rdmScript = inputRedeemScript secondInput
   assertBool "p2wpkh" $ (isPayWitnessPKHash <$> decodeOutput ctx rdmScript) == Right True
 
   let scrptPubKey = witnessScriptPubKey ctx secondInput
@@ -121,15 +120,15 @@ vec4Test ctx = do
   assertEqual "redeem script pubkey equal" rdmScriptP2SH scrptPubKey
   assertEqual "expected redeem script" (expectedOut ctx) rdmScriptP2SH
 
-  assertBool "all non-empty outputs" $ emptyOutput `notElem` psbt.outputs
+  assertBool "all non-empty outputs" $ emptyOutput `notElem` (outputs psbt)
 
 vec5Test :: Ctx -> Assertion
 vec5Test ctx = do
   psbt <- decodeHexPSBTM ctx "Cannot parse validVec5" validVec5Hex
   assertEqual "Correctly decode PSBT" expectedPsbt psbt
-  let (input : _) = psbt.inputs
+  let (input : _) = inputs psbt
 
-  let Just rdmScript = input.inputRedeemScript
+  let Just rdmScript = inputRedeemScript input
   assertBool "p2wsh" $ (isPayWitnessScriptHash <$> decodeOutput ctx rdmScript) == Right True
 
   let scrptPubKey = witnessScriptPubKey ctx input
@@ -147,26 +146,26 @@ vec5Test ctx = do
       PSBT
         { unsignedTransaction =
             Tx
-              { version = 2,
-                inputs =
+              { txVersion = 2,
+                txInputs =
                   [ TxIn
-                      { outpoint =
+                      { txInOutpoint =
                           OutPoint
                             { hash = "39bc5c3b33d66ce3d7852a7942331e3ec10f8ba50f225fc41fb5dfa523239a27",
                               index = 0
                             },
-                        script = "",
-                        sequence = 4294967295
+                        txInScript = "",
+                        txSequence = 4294967295
                       }
                   ],
-                outputs =
+                txOutputs =
                   [ TxOut
                       { value = 199908000,
-                        script = (fromJust . decodeHex) "76a914ffe9c0061097cc3b636f2cb0460fa4fc427d2b4588ac"
+                        txOutScript = (fromJust . decodeHex) "76a914ffe9c0061097cc3b636f2cb0460fa4fc427d2b4588ac"
                       }
                   ],
-                witness = mempty,
-                locktime = 0
+                txWitness = mempty,
+                txLocktime = 0
               },
           globalUnknown = mempty,
           inputs =
@@ -176,7 +175,7 @@ vec5Test ctx = do
                     Just
                       ( TxOut
                           { value = 199909013,
-                            script = (fromJust . decodeHex) "a9146345200f68d189e1adc0df1c4d16ea8f14c0dbeb87"
+                            txOutScript = (fromJust . decodeHex) "a9146345200f68d189e1adc0df1c4d16ea8f14c0dbeb87"
                           }
                       ),
                   partialSigs =
@@ -187,7 +186,7 @@ vec5Test ctx = do
                                   importPubKey ctx
                                     =<< decodeHex
                                       "03b1341ccba7683b6af4f1238cd6e97e7167d569fac47f1e48d47541844355bd46",
-                              compress = True
+                              pkCompress = True
                             },
                           (fromJust . decodeHex) "304302200424b58effaaa694e1559ea5c93bbfd4a89064224055cdf070b6771469442d07021f5c8eb0fea6516d60b8acb33ad64ede60e8785bfb3aa94b99bdf86151db9a9a01"
                         )
@@ -213,7 +212,7 @@ vec5Test ctx = do
                                   importPubKey ctx
                                     =<< decodeHex
                                       "03b1341ccba7683b6af4f1238cd6e97e7167d569fac47f1e48d47541844355bd46",
-                              compress = True
+                              pkCompress = True
                             },
                           ("b4a6ba67", [hardIndex 0, hardIndex 0, hardIndex 4])
                         ),
@@ -223,7 +222,7 @@ vec5Test ctx = do
                                   importPubKey ctx
                                     =<< decodeHex
                                       "03de55d1e1dac805e3f8a58c1fbf9b94c02f3dbaafe127fefca4995f26f82083bd",
-                              compress = True
+                              pkCompress = True
                             },
                           ("b4a6ba67", [hardIndex 0, hardIndex 0, hardIndex 5])
                         )
@@ -247,13 +246,13 @@ vec5Test ctx = do
 vec6Test :: Ctx -> Assertion
 vec6Test ctx = do
   psbt <- decodeHexPSBTM ctx "Cannot parse validVec6" validVec6Hex
-  assertEqual "1 input" 1 (length psbt.inputs)
-  assertEqual "1 output" 1 (length psbt.outputs)
+  assertEqual "1 input" 1 (length $ inputs psbt)
+  assertEqual "1 output" 1 (length $ outputs psbt)
 
-  let tx = psbt.unsignedTransaction
+  let tx = unsignedTransaction psbt
   assertEqual "correct transaction" "75c5c9665a570569ad77dd1279e6fd4628a093c4dcbf8d41532614044c14c115" (txHash tx)
 
-  assertEqual "correct unknowns" expectedUnknowns (head psbt.inputs).inputUnknown
+  assertEqual "correct unknowns" expectedUnknowns (inputUnknown $ head $ inputs psbt)
   where
     expectedUnknowns =
       UnknownMap $
@@ -278,7 +277,7 @@ complexPsbtTest ctx = do
   where
     stripRedundantUtxos PSBT {..} = PSBT {inputs = stripRedundantUtxo <$> inputs, ..}
     stripRedundantUtxo input
-      | Just {} <- input.witnessUtxo = input {nonWitnessUtxo = Nothing}
+      | Just {} <- witnessUtxo input = input {nonWitnessUtxo = Nothing}
       | otherwise = input
 
 psbtSignerTest :: Ctx -> Assertion
@@ -296,7 +295,7 @@ psbtSignerTest ctx = do
     signer = secKeySigner ctx theSecKey <> xPrvSigner ctx xprv (Just origin)
 
     Just theSecKey = secKey "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-    thePubKey = PublicKey {point = derivePubKey ctx theSecKey, compress = True}
+    thePubKey = PublicKey {point = derivePubKey ctx theSecKey, pkCompress = True}
 
     rootXPrv = makeXPrvKey "PSBTSignerTest"
     rootFP = xPubFP ctx $ deriveXPubKey ctx rootXPrv
@@ -306,12 +305,12 @@ psbtSignerTest ctx = do
     origin = (rootFP, keyPath)
 
     originKeyPath = Deriv :| 444 :/ 0
-    originPathSecKey = (derivePath ctx originKeyPath rootXPrv).key
-    originPathPubKey = PublicKey {point = derivePubKey ctx originPathSecKey, compress = True}
+    originPathSecKey = privKey (derivePath ctx originKeyPath rootXPrv)
+    originPathPubKey = PublicKey {point = derivePubKey ctx originPathSecKey, pkCompress = True}
 
     directPath = Deriv :/ 1
-    directPathSecKey = (derivePath ctx directPath xprv).key
-    directPathPubKey = PublicKey {point = derivePubKey ctx directPathSecKey, compress = True}
+    directPathSecKey = privKey (derivePath ctx directPath xprv)
+    directPathPubKey = PublicKey {point = derivePubKey ctx directPathSecKey, pkCompress = True}
 
 expectedOut :: Ctx -> ScriptOutput
 expectedOut ctx =
@@ -324,9 +323,9 @@ witnessScriptPubKey :: Ctx -> Input -> ScriptOutput
 witnessScriptPubKey ctx =
   fromRight (error "could not decode witness utxo")
     . unmarshal ctx
-    . (.script)
+    . txOutScript
     . fromJust
-    . (.witnessUtxo)
+    . witnessUtxo
 
 decodeHexPSBT :: Ctx -> Text -> Either String PSBT
 decodeHexPSBT ctx = runGet (getPSBT ctx) . fromJust . decodeHex
@@ -360,7 +359,7 @@ encodeVecTest ctx psbt hex =
 trivialPSBT :: PSBT
 trivialPSBT =
   PSBT
-    { unsignedTransaction = Tx {version = 2, inputs = [], outputs = [], witness = [], locktime = 0},
+    { unsignedTransaction = Tx {txVersion = 2, txInputs = [], txOutputs = [], txWitness = [], txLocktime = 0},
       globalUnknown = UnknownMap mempty,
       inputs = [],
       outputs = []
@@ -376,12 +375,12 @@ verifyNonWitnessPSBT :: Network -> Ctx -> PSBT -> Bool
 verifyNonWitnessPSBT net ctx psbt =
   verifyStdTx net ctx (finalTransaction (complete ctx psbt)) sigData
   where
-    sigData = inputSigData =<< zip psbt.inputs psbt.unsignedTransaction.inputs
+    sigData = inputSigData =<< zip (inputs psbt) (txInputs . unsignedTransaction $ psbt)
     decodeOutScript = fromRight (error "Could not parse output script") . unmarshal ctx
     inputSigData (input@Input {}, txInput@TxIn {}) =
       map
-        (\(TxOut val script) -> (decodeOutScript script, val, txInput.outpoint))
-        (fromJust input.nonWitnessUtxo).outputs
+        (\(TxOut val script) -> (decodeOutScript script, val, txInOutpoint txInput))
+        (txOutputs . fromJust $ nonWitnessUtxo input)
 
 unfinalizedPkhPSBT :: Network -> Ctx -> (PrivateKey, PublicKey) -> PSBT
 unfinalizedPkhPSBT net ctx (prvKey, pubKey) =
@@ -402,12 +401,12 @@ unfinalizedPkhPSBT net ctx (prvKey, pubKey) =
     prevOut =
       TxOut
         { value = 200000000,
-          script = runPutS (serialize prevOutScript)
+          txOutScript = runPutS (serialize prevOutScript)
         }
-    h = txSigHash net currTx prevOutScript prevOut.value 0 sigHashAll
+    h = txSigHash net currTx prevOutScript (value prevOut) 0 sigHashAll
     sig =
       encodeTxSig net ctx $
-        TxSignature (signHash ctx prvKey.key h) sigHashAll
+        TxSignature (signHash ctx (key prvKey) h) sigHashAll
 
 arbitraryMultiSig :: Ctx -> Gen ([(PrivateKey, PublicKey)], Int)
 arbitraryMultiSig ctx = do
@@ -432,9 +431,9 @@ unfinalizedMsPSBT net ctx (keys, m) =
     prevOut =
       TxOut
         { value = 200000000,
-          script = marshal ctx (toP2SH prevOutScript)
+          txOutScript = marshal ctx (toP2SH prevOutScript)
         }
-    h = txSigHash net currTx prevOutScript prevOut.value 0 sigHashAll
+    h = txSigHash net currTx prevOutScript (value prevOut) 0 sigHashAll
     sigs = fromList $ map sig keys
     sig (prvKey@PrivateKey {key}, pubKey) =
       let sh = signHash ctx key h
@@ -444,20 +443,20 @@ unfinalizedMsPSBT net ctx (keys, m) =
 unfinalizedTx :: TxHash -> Tx
 unfinalizedTx prevHash =
   Tx
-    { version = 2,
-      inputs =
+    { txVersion = 2,
+      txInputs =
         [ TxIn
-            { outpoint = OutPoint prevHash 0,
-              script = "",
-              sequence = 4294967294
+            { txInOutpoint = OutPoint prevHash 0,
+              txInScript = "",
+              txSequence = 4294967294
             }
         ],
-      outputs =
-        [ TxOut {value = 99999699, script = hexScript "76a914d0c59903c5bac2868760e90fd521a4665aa7652088ac"},
-          TxOut {value = 100000000, script = hexScript "a9143545e6e33b832c47050f24d3eeb93c9c03948bc787"}
+      txOutputs =
+        [ TxOut {value = 99999699, txOutScript = hexScript "76a914d0c59903c5bac2868760e90fd521a4665aa7652088ac"},
+          TxOut {value = 100000000, txOutScript = hexScript "a9143545e6e33b832c47050f24d3eeb93c9c03948bc787"}
         ],
-      witness = [],
-      locktime = 1257139
+      txWitness = [],
+      txLocktime = 1257139
     }
 
 invalidVec :: [Text]
@@ -488,40 +487,40 @@ validEncodeVec = [(validVec1, validVec1Hex)]
 testTx1 :: Tx
 testTx1 =
   Tx
-    { version = 2,
-      inputs =
+    { txVersion = 2,
+      txInputs =
         [ TxIn
-            { outpoint = OutPoint "f61b1742ca13176464adb3cb66050c00787bb3a4eead37e985f2df1e37718126" 0,
-              script = "",
-              sequence = 4294967294
+            { txInOutpoint = OutPoint "f61b1742ca13176464adb3cb66050c00787bb3a4eead37e985f2df1e37718126" 0,
+              txInScript = "",
+              txSequence = 4294967294
             }
         ],
-      outputs =
-        [ TxOut {value = 99999699, script = hexScript "76a914d0c59903c5bac2868760e90fd521a4665aa7652088ac"},
-          TxOut {value = 100000000, script = hexScript "a9143545e6e33b832c47050f24d3eeb93c9c03948bc787"}
+      txOutputs =
+        [ TxOut {value = 99999699, txOutScript = hexScript "76a914d0c59903c5bac2868760e90fd521a4665aa7652088ac"},
+          TxOut {value = 100000000, txOutScript = hexScript "a9143545e6e33b832c47050f24d3eeb93c9c03948bc787"}
         ],
-      witness = [],
-      locktime = 1257139
+      txWitness = [],
+      txLocktime = 1257139
     }
 
 testUtxo :: [TxOut] -> Tx
 testUtxo prevOuts =
   Tx
-    { version = 1,
-      inputs =
+    { txVersion = 1,
+      txInputs =
         [ TxIn
-            { outpoint = OutPoint "e567952fb6cc33857f392efa3a46c995a28f69cca4bb1b37e0204dab1ec7a389" 1,
-              script = hexScript "160014be18d152a9b012039daf3da7de4f53349eecb985",
-              sequence = 4294967295
+            { txInOutpoint = OutPoint "e567952fb6cc33857f392efa3a46c995a28f69cca4bb1b37e0204dab1ec7a389" 1,
+              txInScript = hexScript "160014be18d152a9b012039daf3da7de4f53349eecb985",
+              txSequence = 4294967295
             },
           TxIn
-            { outpoint = OutPoint "b490486aec3ae671012dddb2bb08466bef37720a533a894814ff1da743aaf886" 1,
-              script = hexScript "160014fe3e9ef1a745e974d902c4355943abcb34bd5353",
-              sequence = 4294967295
+            { txInOutpoint = OutPoint "b490486aec3ae671012dddb2bb08466bef37720a533a894814ff1da743aaf886" 1,
+              txInScript = hexScript "160014fe3e9ef1a745e974d902c4355943abcb34bd5353",
+              txSequence = 4294967295
             }
         ],
-      outputs = prevOuts,
-      witness =
+      txOutputs = prevOuts,
+      txWitness =
         [ [ fromJust $ decodeHex "304402202712be22e0270f394f568311dc7ca9a68970b8025fdd3b240229f07f8a5f3a240220018b38d7dcd314e734c9276bd6fb40f673325bc4baa144c800d2f2f02db2765c01",
             fromJust $ decodeHex "03d2e15674941bad4a996372cb87e1856d3652606d98562fe39c5e9e7e413f2105"
           ],
@@ -529,14 +528,14 @@ testUtxo prevOuts =
             fromJust $ decodeHex "0223b72beef0965d10be0778efecd61fcac6f79a4ea169393380734464f84f2ab3"
           ]
         ],
-      locktime = 0
+      txLocktime = 0
     }
 
 testUtxo1 :: Tx
 testUtxo1 =
   testUtxo
-    [ TxOut {value = 200000000, script = hexScript "76a91485cff1097fd9e008bb34af709c62197b38978a4888ac"},
-      TxOut {value = 190303501938, script = hexScript "a914339725ba21efd62ac753a9bcd067d6c7a6a39d0587"}
+    [ TxOut {value = 200000000, txOutScript = hexScript "76a91485cff1097fd9e008bb34af709c62197b38978a4888ac"},
+      TxOut {value = 190303501938, txOutScript = hexScript "a914339725ba21efd62ac753a9bcd067d6c7a6a39d0587"}
     ]
 
 validVec1 :: PSBT

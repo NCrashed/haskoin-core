@@ -1,6 +1,5 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Haskoin.Crypto.KeysSpec (spec) where
@@ -8,7 +7,8 @@ module Haskoin.Crypto.KeysSpec (spec) where
 import Control.Lens
 import Control.Monad
 import Data.Aeson as A
-import Data.Aeson.Lens
+import Data.Aeson.Lens hiding (key)
+import qualified Data.Aeson.Lens as A
 import Data.ByteString qualified as B
 import Data.ByteString.Char8 qualified as C
 import Data.Bytes.Get
@@ -112,7 +112,7 @@ testMiniKey :: Assertion
 testMiniKey =
   assertEqual "fromMiniKey" (Just res) (go "S6c56bnXQiBjk9mqSYE7ykVQ7NzrRy")
   where
-    go = fmap (encodeHex . (.key.get)) . fromMiniKey
+    go = fmap (encodeHex . (getSecKey . key)) . fromMiniKey
     res = "4c7a9640c72dc2099f23715d0c8a0d8a35f8906e3cab61dd3f78b67bf887c9ab"
 
 -- Test vectors from:
@@ -123,11 +123,11 @@ testKeyIOValidVector ctx (a, payload, obj)
   | disabled = return () -- There are invalid version 1 bech32 addresses
   | isPrv = do
       -- Test from WIF to SecKey
-      let isComp = obj ^?! key "isCompressed" . _Bool
+      let isComp = obj ^?! A.key "isCompressed" . _Bool
           prvKeyM = fromWif net a
-          prvKeyHexM = encodeHex . (.key.get) <$> prvKeyM
+          prvKeyHexM = encodeHex . (getSecKey . key) <$> prvKeyM
       assertBool "Valid PrvKey" $ isJust prvKeyM
-      assertEqual "Valid compression" (Just isComp) ((.compress) <$> prvKeyM)
+      assertEqual "Valid compression" (Just isComp) (prvCompress <$> prvKeyM)
       assertEqual "WIF matches payload" (Just payload) prvKeyHexM
       let prvAsPubM :: Maybe ScriptOutput
           prvAsPubM = (eitherToMaybe . unmarshal ctx <=< decodeHex) a
@@ -151,9 +151,9 @@ testKeyIOValidVector ctx (a, payload, obj)
           resM = addrToText net =<< outputAddress ctx =<< outM
       assertEqual "Payload matches address" (Just a) resM
   where
-    isPrv = obj ^?! key "isPrivkey" . _Bool
-    disabled = fromMaybe False $ obj ^? key "disabled" . _Bool
-    chain = obj ^?! key "chain" . _String
+    isPrv = obj ^?! A.key "isPrivkey" . _Bool
+    disabled = fromMaybe False $ obj ^? A.key "disabled" . _Bool
+    chain = obj ^?! A.key "chain" . _String
     net =
       case chain of
         "main" -> btc
@@ -185,17 +185,17 @@ testPrivkey = do
 
 testPrvKeyCompressed :: Assertion
 testPrvKeyCompressed = do
-  assertBool "Key 1" $ not sec1.compress
-  assertBool "Key 2" $ not sec2.compress
-  assertBool "Key 1C" sec1C.compress
-  assertBool "Key 2C" sec2C.compress
+  assertBool "Key 1" $ not $ prvCompress sec1
+  assertBool "Key 2" $ not $ prvCompress sec2 
+  assertBool "Key 1C" $ prvCompress sec1C 
+  assertBool "Key 2C" $ prvCompress sec2C
 
 testKeyCompressed :: Ctx -> Assertion
 testKeyCompressed ctx = do
-  assertBool "Key 1" $ not (pub1 ctx).compress
-  assertBool "Key 2" $ not (pub2 ctx).compress
-  assertBool "Key 1C" (pub1C ctx).compress
-  assertBool "Key 2C" (pub2C ctx).compress
+  assertBool "Key 1" $ not $ pkCompress (pub1 ctx)
+  assertBool "Key 2" $ not $ pkCompress (pub2 ctx)
+  assertBool "Key 1C" $ pkCompress (pub1C ctx)
+  assertBool "Key 2C" $ pkCompress (pub2C ctx)
 
 testMatchingAddress :: Ctx -> Assertion
 testMatchingAddress ctx = do
@@ -215,38 +215,38 @@ sigMsg =
 
 testSignature :: Ctx -> Hash256 -> Assertion
 testSignature ctx h = do
-  let sign1 = signHash ctx sec1.key h
-      sign2 = signHash ctx sec2.key h
-      sign1C = signHash ctx sec1C.key h
-      sign2C = signHash ctx sec2C.key h
-  assertBool "Key 1, Sign1" $ verifyHashSig ctx h sign1 (pub1 ctx).point
-  assertBool "Key 1, Sign2" $ not $ verifyHashSig ctx h sign2 (pub1 ctx).point
-  assertBool "Key 1, Sign1C" $ verifyHashSig ctx h sign1C (pub1 ctx).point
-  assertBool "Key 1, Sign2C" $ not $ verifyHashSig ctx h sign2C (pub1 ctx).point
-  assertBool "Key 2, Sign1" $ not $ verifyHashSig ctx h sign1 (pub2 ctx).point
-  assertBool "Key 2, Sign2" $ verifyHashSig ctx h sign2 (pub2 ctx).point
-  assertBool "Key 2, Sign1C" $ not $ verifyHashSig ctx h sign1C (pub2 ctx).point
-  assertBool "Key 2, Sign2C" $ verifyHashSig ctx h sign2C (pub2 ctx).point
-  assertBool "Key 1C, Sign1" $ verifyHashSig ctx h sign1 (pub1C ctx).point
-  assertBool "Key 1C, Sign2" $ not $ verifyHashSig ctx h sign2 (pub1C ctx).point
-  assertBool "Key 1C, Sign1C" $ verifyHashSig ctx h sign1C (pub1C ctx).point
-  assertBool "Key 1C, Sign2C" $ not $ verifyHashSig ctx h sign2C (pub1C ctx).point
-  assertBool "Key 2C, Sign1" $ not $ verifyHashSig ctx h sign1 (pub2C ctx).point
-  assertBool "Key 2C, Sign2" $ verifyHashSig ctx h sign2 (pub2C ctx).point
-  assertBool "Key 2C, Sign1C" $ not $ verifyHashSig ctx h sign1C (pub2C ctx).point
-  assertBool "Key 2C, Sign2C" $ verifyHashSig ctx h sign2C (pub2C ctx).point
+  let sign1 = signHash ctx (key sec1) h
+      sign2 = signHash ctx (key sec2) h
+      sign1C = signHash ctx (key sec1C) h
+      sign2C = signHash ctx (key sec2C) h
+  assertBool "Key 1, Sign1" $ verifyHashSig ctx h sign1 (point $ pub1 ctx)
+  assertBool "Key 1, Sign2" $ not $ verifyHashSig ctx h sign2 (point $ pub1 ctx)
+  assertBool "Key 1, Sign1C" $ verifyHashSig ctx h sign1C (point $ pub1 ctx)
+  assertBool "Key 1, Sign2C" $ not $ verifyHashSig ctx h sign2C (point $ pub1 ctx)
+  assertBool "Key 2, Sign1" $ not $ verifyHashSig ctx h sign1 (point $ pub2 ctx)
+  assertBool "Key 2, Sign2" $ verifyHashSig ctx h sign2 (point $ pub2 ctx)
+  assertBool "Key 2, Sign1C" $ not $ verifyHashSig ctx h sign1C (point $ pub2 ctx)
+  assertBool "Key 2, Sign2C" $ verifyHashSig ctx h sign2C (point $ pub2 ctx)
+  assertBool "Key 1C, Sign1" $ verifyHashSig ctx h sign1 (point $ pub1C ctx)
+  assertBool "Key 1C, Sign2" $ not $ verifyHashSig ctx h sign2 (point $ pub1C ctx)
+  assertBool "Key 1C, Sign1C" $ verifyHashSig ctx h sign1C (point $ pub1C ctx)
+  assertBool "Key 1C, Sign2C" $ not $ verifyHashSig ctx h sign2C (point $ pub1C ctx)
+  assertBool "Key 2C, Sign1" $ not $ verifyHashSig ctx h sign1 (point $ pub2C ctx)
+  assertBool "Key 2C, Sign2" $ verifyHashSig ctx h sign2 (point $ pub2C ctx)
+  assertBool "Key 2C, Sign1C" $ not $ verifyHashSig ctx h sign1C (point $ pub2C ctx)
+  assertBool "Key 2C, Sign2C" $ verifyHashSig ctx h sign2C (point $ pub2C ctx)
 
 testDetSigning :: Ctx -> Assertion
 testDetSigning ctx = do
   let m = doubleSHA256 ("Very deterministic message" :: B.ByteString)
   assertEqual
     "Det sig 1"
-    (signHash ctx sec1.key m)
-    (signHash ctx sec1C.key m)
+    (signHash ctx (key sec1) m)
+    (signHash ctx (key sec1C) m)
   assertEqual
     "Det sig 2"
-    (signHash ctx sec2.key m)
-    (signHash ctx sec2C.key m)
+    (signHash ctx (key sec2) m)
+    (signHash ctx (key sec2C) m)
 
 strSecret1, strSecret2, strSecret1C, strSecret2C :: Text
 strSecret1 = "5HxWvvfubhXpYYpS3tJkw6fq9jE9j18THftkZjHHfmFiWtmAbrj"

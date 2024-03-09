@@ -1,7 +1,6 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE OverloadedRecordDot #-}
 
 -- |
 -- Module      : Haskoin.Test.Script
@@ -201,7 +200,7 @@ arbitraryValidSigHash net = do
   sh <- elements [sigHashAll, sigHashNone, sigHashSingle]
   f1 <-
     elements $
-      if isJust net.sigHashForkId
+      if isJust $ netSigHashForkId net
         then [id, setForkIdFlag]
         else [id]
   f2 <- elements [id, setAnyoneCanPay]
@@ -230,7 +229,7 @@ arbitraryTxSignature net ctx = do
     filterBad sh =
       not $
         isSigHashUnknown sh
-          || isNothing net.sigHashForkId && hasForkIdFlag sh
+          || isNothing (netSigHashForkId net) && hasForkIdFlag sh
 
 -- | Arbitrary transaction signature that could also be empty.
 arbitraryTxSignatureEmpty :: Network -> Ctx -> Gen TxSignature
@@ -257,7 +256,7 @@ arbitraryScriptOutput net ctx =
       arbitrarySHOutput,
       arbitraryDCOutput
     ]
-      ++ if net.segWit
+      ++ if segWit net
         then
           [ arbitraryWPKHashOutput,
             arbitraryWSHOutput,
@@ -312,12 +311,12 @@ arbitraryMSOutputC ctx = do
   (m, n) <- arbitraryMSParam
   keys <-
     map snd
-      <$> vectorOf n (arbitraryKeyPair ctx `suchThat` ((.compress) . snd))
+      <$> vectorOf n (arbitraryKeyPair ctx `suchThat` (pkCompress . snd))
   return $ PayMulSig keys m
 
 -- | Arbitrary 'ScriptOutput' of type 'PayScriptHash'.
 arbitrarySHOutput :: Gen ScriptOutput
-arbitrarySHOutput = PayScriptHash . (.hash160) <$> arbitraryScriptAddress
+arbitrarySHOutput = PayScriptHash . hash160 <$> arbitraryScriptAddress
 
 -- | Arbitrary 'ScriptOutput' of type 'DataCarrier'.
 arbitraryDCOutput :: Gen ScriptOutput
@@ -365,7 +364,7 @@ arbitraryPKHashInputFull net ctx = do
 arbitraryPKHashInputFullC :: Network -> Ctx -> Gen ScriptInput
 arbitraryPKHashInputFullC net ctx = do
   sig <- lst3 <$> arbitraryTxSignature net ctx
-  key <- fmap snd $ arbitraryKeyPair ctx `suchThat` ((.compress) . snd)
+  key <- fmap snd $ arbitraryKeyPair ctx `suchThat` (pkCompress . snd)
   return $ RegularInput $ SpendPKHash sig key
 
 -- | Arbitrary 'ScriptInput' of type 'SpendMulSig'.
@@ -379,7 +378,7 @@ arbitraryMSInput net ctx = do
 arbitrarySHInput :: Network -> Ctx -> Gen ScriptInput
 arbitrarySHInput net ctx = do
   i <- arbitrarySimpleInput net ctx
-  ScriptHashInput i.get <$> arbitrarySimpleOutput ctx
+  ScriptHashInput (getScriptInput i) <$> arbitrarySimpleOutput ctx
 
 -- | Arbitrary 'ScriptInput' of type 'ScriptHashInput' containing a
 -- 'RedeemScript' of type 'PayMulSig' and an input of type 'SpendMulSig'.

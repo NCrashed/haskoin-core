@@ -1,8 +1,6 @@
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE OverloadedRecordDot #-}
-{-# LANGUAGE NoFieldSelectors #-}
 
 -- |
 -- Module      : Haskoin.Block.Merkle
@@ -70,7 +68,7 @@ type PartialMerkleTree = [Hash256]
 -- transactions that pass a bloom filter that was negotiated.
 data MerkleBlock = MerkleBlock
   { -- | block header
-    header :: !BlockHeader,
+    merkleHeader :: !BlockHeader,
     -- | total number of transactions in block
     txn :: !Word32,
     -- | hashes in depth-first order
@@ -82,13 +80,13 @@ data MerkleBlock = MerkleBlock
 
 instance Serial MerkleBlock where
   deserialize = do
-    header <- deserialize
+    merkleHeader <- deserialize
     ntx <- getWord32le
     (VarInt matchLen) <- deserialize
     hashes <- replicateM (fromIntegral matchLen) deserialize
     (VarInt flagLen) <- deserialize
     ws <- replicateM (fromIntegral flagLen) getWord8
-    return $ MerkleBlock header ntx hashes (decodeMerkleFlags ws)
+    return $ MerkleBlock merkleHeader ntx hashes (decodeMerkleFlags ws)
 
   serialize (MerkleBlock h ntx hashes flags) = do
     serialize h
@@ -163,7 +161,7 @@ calcHash ::
   Hash256
 calcHash height pos txs
   | height < 0 || pos < 0 = error "calcHash: Invalid parameters"
-  | height == 0 = (txs !! pos).get
+  | height == 0 = getTxHash (txs !! pos)
   | otherwise = hash2 left right
   where
     left = calcHash (height - 1) (pos * 2) txs
@@ -252,7 +250,7 @@ extractMatches net flags hashes ntx
   | ntx == 0 =
       Left
         "extractMatches: number of transactions can not be 0"
-  | ntx > net.maxBlockSize `div` 60 =
+  | ntx > maxBlockSize net `div` 60 =
       Left
         "extractMatches: number of transactions excessively high"
   | length hashes > ntx =
@@ -292,8 +290,8 @@ boolsToWord8 xs = foldl setBit 0 (map snd $ filter fst $ zip xs [0 .. 7])
 -- | Get matching transactions from Merkle block.
 merkleBlockTxs :: Network -> MerkleBlock -> Either String [TxHash]
 merkleBlockTxs net b = do
-  (root, ths) <- extractMatches net b.flags b.hashes (fromIntegral b.txn)
-  when (root /= b.header.merkle) $
+  (root, ths) <- extractMatches net (flags b) (hashes b) (fromIntegral $ txn b)
+  when (root /= merkle (merkleHeader b)) $
     Left "merkleBlockTxs: Merkle root incorrect"
   return ths
 

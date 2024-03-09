@@ -1,8 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE OverloadedRecordDot #-}
-{-# LANGUAGE NoFieldSelectors #-}
 
 module Haskoin.Crypto.Keys.Extended.Internal
   ( Fingerprint (..),
@@ -38,7 +36,7 @@ import Haskoin.Util.Helpers (decodeHex, encodeHex)
 import Text.Read (readEither, readPrec)
 
 -- | Fingerprint of parent
-newtype Fingerprint = Fingerprint {get :: Word32}
+newtype Fingerprint = Fingerprint {getFingerprint :: Word32}
   deriving (Eq, Ord, Hashable, Typeable, Generic, NFData)
 
 fingerprintToText :: Fingerprint -> Text
@@ -69,7 +67,7 @@ instance IsString Fingerprint where
       hexError = error "Fingerprint literal: Invalid hex"
 
 instance Serial Fingerprint where
-  serialize = putWord32be . (.get)
+  serialize = putWord32be . getFingerprint
   deserialize = Fingerprint <$> getWord32be
 
 instance Binary Fingerprint where

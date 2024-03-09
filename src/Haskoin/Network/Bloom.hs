@@ -4,9 +4,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE NoFieldSelectors #-}
 
 -- |
 -- Module      : Haskoin.Network.Bloom
@@ -151,7 +149,7 @@ instance Serialize BloomFilter where
   get = deserialize
 
 -- | Set a new bloom filter on the peer connection.
-newtype FilterLoad = FilterLoad {filter :: BloomFilter}
+newtype FilterLoad = FilterLoad {filterLoad :: BloomFilter}
   deriving (Eq, Show, Read, Generic)
   deriving newtype (NFData)
 
@@ -169,7 +167,7 @@ instance Serialize FilterLoad where
 
 -- | Add the given data element to the connections current filter without
 -- requiring a completely new one to be set.
-newtype FilterAdd = FilterAdd {get :: ByteString}
+newtype FilterAdd = FilterAdd {getFilterAdd :: ByteString}
   deriving (Eq, Show, Read, Generic)
   deriving newtype (NFData)
 
@@ -219,9 +217,9 @@ bloomCreate numElem fpRate =
 
 bloomHash :: BloomFilter -> Word32 -> ByteString -> Word32
 bloomHash b hashNum bs =
-  murmur3 seed bs `mod` (fromIntegral (S.length (b.array)) * 8)
+  murmur3 seed bs `mod` (fromIntegral (S.length (array b)) * 8)
   where
-    seed = hashNum * 0xfba4c795 + b.tweak
+    seed = hashNum * 0xfba4c795 + tweak b
 
 -- | Insert arbitrary data into a bloom filter. Returns the new bloom filter
 -- containing the new data.
@@ -236,13 +234,13 @@ bloomInsert b bs
   | isBloomFull b = b
   | otherwise = b {array = dat}
   where
-    idxs = map (\i -> bloomHash b i bs) [0 .. b.functions - 1]
+    idxs = map (\i -> bloomHash b i bs) [0 .. functions b - 1]
     upd s i =
       S.adjust
         (.|. bitMask !! fromIntegral (7 .&. i))
         (fromIntegral $ i `shiftR` 3)
         s
-    dat = foldl upd b.array idxs
+    dat = foldl upd (array b) idxs
 
 -- | Tests if some arbitrary data matches the filter. This can be either because
 -- the data was inserted into the filter or because it is a false positive.
@@ -258,8 +256,8 @@ bloomContains b bs
   | isBloomEmpty b = False
   | otherwise = all isSet idxs
   where
-    s = b.array
-    idxs = map (\i -> bloomHash b i bs) [0 .. b.functions - 1]
+    s = array b
+    idxs = map (\i -> bloomHash b i bs) [0 .. functions b - 1]
     isSet i =
       S.index s (fromIntegral $ i `shiftR` 3)
         .&. (bitMask !! fromIntegral (7 .&. i))
@@ -278,7 +276,7 @@ bloomRelevantUpdate ::
   Maybe BloomFilter
 bloomRelevantUpdate ctx b tx
   | isBloomFull b || isBloomEmpty b = Nothing
-  | b.flags == BloomUpdateNone = Nothing
+  | flags b == BloomUpdateNone = Nothing
   | not (null matchOuts) = Just $ foldl' addRelevant b matchOuts
   | otherwise = Nothing
   where
@@ -286,7 +284,7 @@ bloomRelevantUpdate ctx b tx
 
     h = txHash tx
     -- Decode the scriptOutpus and add vOuts in case we make them outpoints
-    decodedOutputScripts = traverse (unmarshal ctx . (.script)) tx.outputs
+    decodedOutputScripts = traverse (unmarshal ctx . txOutScript) (txOutputs tx)
     err = error "Error Decoding output script"
     idxOutputScripts = either (const err) (zip [0 ..]) decodedOutputScripts
     -- Check if any txOuts were contained in the bloom filter
@@ -295,7 +293,7 @@ bloomRelevantUpdate ctx b tx
     matchOuts = matchFilter idxOutputScripts
     addRelevant :: BloomFilter -> (Word32, ScriptOutput) -> BloomFilter
     addRelevant bf (id', scriptOut) =
-      case (b.flags, scriptType) of
+      case (flags b, scriptType) of
         -- We filtered out BloomUpdateNone so we insert any PayPk or PayMulSig
 
         (_, True) -> bloomInsert bf outpoint
@@ -325,11 +323,11 @@ bloomRelevantUpdate ctx b tx
 
 -- | Returns True if the filter is empty (all bytes set to 0x00)
 isBloomEmpty :: BloomFilter -> Bool
-isBloomEmpty b = all (== 0x00) $ F.toList b.array
+isBloomEmpty b = all (== 0x00) $ F.toList $ array b
 
 -- | Returns True if the filter is full (all bytes set to 0xff)
 isBloomFull :: BloomFilter -> Bool
-isBloomFull b = all (== 0xff) $ F.toList b.array
+isBloomFull b = all (== 0xff) $ F.toList $ array b
 
 -- | Tests if a given bloom filter is valid.
 isBloomValid ::

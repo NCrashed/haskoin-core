@@ -2,8 +2,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE OverloadedRecordDot #-}
-{-# LANGUAGE NoFieldSelectors #-}
 
 -- |
 -- Module      : Haskoin.Network.Message
@@ -143,7 +141,7 @@ getMessage net = do
   (MessageHeader mgc cmd len chk) <- deserialize
   bs <- lookAhead $ getByteString $ fromIntegral len
   unless
-    (mgc == net.magic)
+    (mgc == netMagic net)
     (fail $ "get: Invalid network magic bytes: " ++ show mgc)
   unless
     (checkSum32 bs == chk)
@@ -219,6 +217,6 @@ putMessage net msg = do
           MOther c p -> (MCOther c, p)
       chk = checkSum32 payload
       len = fromIntegral $ B.length payload
-      header = MessageHeader net.magic cmd len chk
+      header = MessageHeader (netMagic net) cmd len chk
   serialize header
   putByteString payload

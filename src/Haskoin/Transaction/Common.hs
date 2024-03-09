@@ -4,10 +4,8 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE NoFieldSelectors #-}
 
 -- |
 -- Module      : Haskoin.Transaction.Common
@@ -64,7 +62,7 @@ import Haskoin.Util.Helpers
 import Text.Read as R
 
 -- | Transaction id: hash of transaction excluding witness data.
-newtype TxHash = TxHash {get :: Hash256}
+newtype TxHash = TxHash {getTxHash :: Hash256}
   deriving (Eq, Ord, Generic)
   deriving newtype (Hashable, NFData)
 
@@ -107,8 +105,8 @@ nosigTxHash :: Tx -> TxHash
 nosigTxHash Tx {..} =
   TxHash . doubleSHA256 . runPutS $ serialize tx
   where
-    tx = Tx {inputs = map clr inputs, ..}
-    clr TxIn {..} = TxIn {script = B.empty, ..}
+    tx = Tx {txInputs = map clr txInputs, ..}
+    clr TxIn {..} = TxIn {txInScript = B.empty, ..}
 
 -- | Convert transaction hash to hex form, reversing bytes.
 txHashToHex :: TxHash -> Text
@@ -134,21 +132,21 @@ type WitnessStackItem = ByteString
 -- | Data type representing a transaction.
 data Tx = Tx
   { -- | transaction data format version
-    version :: !Word32,
+    txVersion :: !Word32,
     -- | list of transaction inputs
-    inputs :: ![TxIn],
+    txInputs :: ![TxIn],
     -- | list of transaction outputs
-    outputs :: ![TxOut],
+    txOutputs :: ![TxOut],
     -- | witness data for the transaction
-    witness :: !WitnessData,
+    txWitness :: !WitnessData,
     -- | earliest mining height or time
-    locktime :: !Word32
+    txLocktime :: !Word32
   }
   deriving (Show, Read, Eq, Ord, Generic, Hashable, NFData)
 
 -- | Compute transaction hash.
 txHash :: Tx -> TxHash
-txHash tx = TxHash . doubleSHA256 . runPutS $ serialize tx {witness = []}
+txHash tx = TxHash . doubleSHA256 . runPutS $ serialize tx {txWitness = []}
 
 instance IsString Tx where
   fromString =
@@ -159,7 +157,7 @@ instance IsString Tx where
 instance Serial Tx where
   deserialize = isWitnessTx >>= bool parseLegacyTx parseWitnessTx
   serialize tx
-    | null tx.witness = putLegacyTx tx
+    | null (txWitness tx) = putLegacyTx tx
     | otherwise = putWitnessTx tx
 
 instance Binary Tx where
@@ -172,27 +170,27 @@ instance Serialize Tx where
 
 putInOut :: (MonadPut m) => Tx -> m ()
 putInOut tx = do
-  putVarInt $ length tx.inputs
-  mapM_ serialize tx.inputs
-  putVarInt $ length tx.outputs
-  mapM_ serialize tx.outputs
+  putVarInt $ length (txInputs tx)
+  mapM_ serialize (txInputs tx)
+  putVarInt $ length (txOutputs tx)
+  mapM_ serialize (txOutputs tx)
 
 -- | Non-SegWit transaction serializer.
 putLegacyTx :: (MonadPut m) => Tx -> m ()
 putLegacyTx tx = do
-  putWord32le tx.version
+  putWord32le $ txVersion tx
   putInOut tx
-  putWord32le tx.locktime
+  putWord32le (txLocktime tx)
 
 -- | Witness transaciton serializer.
 putWitnessTx :: (MonadPut m) => Tx -> m ()
 putWitnessTx tx = do
-  putWord32le tx.version
+  putWord32le $ txVersion tx
   putWord8 0x00
   putWord8 0x01
   putInOut tx
-  putWitnessData tx.witness
-  putWord32le tx.locktime
+  putWitnessData (txWitness tx)
+  putWord32le (txLocktime tx)
 
 isWitnessTx :: (MonadGet m) => m Bool
 isWitnessTx = lookAhead $ do
@@ -204,27 +202,27 @@ isWitnessTx = lookAhead $ do
 -- | Non-SegWit transaction deseralizer.
 parseLegacyTx :: (MonadGet m) => m Tx
 parseLegacyTx = do
-  version <- getWord32le
-  inputs <- rl =<< deserialize
-  outputs <- rl =<< deserialize
-  when (length inputs == 0x00 && length outputs == 0x01) $
+  txVersion <- getWord32le
+  txInputs <- rl =<< deserialize
+  txOutputs <- rl =<< deserialize
+  when (length txInputs == 0x00 && length txOutputs == 0x01) $
     fail "Witness transaction"
-  locktime <- getWord32le
-  return Tx {witness = [], ..}
+  txLocktime <- getWord32le
+  return Tx {txWitness = [], ..}
   where
     rl (VarInt c) = replicateM (fromIntegral c) deserialize
 
 -- | Witness transaction deserializer.
 parseWitnessTx :: (MonadGet m) => m Tx
 parseWitnessTx = do
-  version <- getWord32le
+  txVersion <- getWord32le
   m <- getWord8
   f <- getWord8
   unless (m == 0x00 && f == 0x01) $ fail "Not a witness transaction"
-  inputs <- replicateList =<< deserialize
-  outputs <- replicateList =<< deserialize
-  witness <- parseWitnessData $ length inputs
-  locktime <- getWord32le
+  txInputs <- replicateList =<< deserialize
+  txOutputs <- replicateList =<< deserialize
+  txWitness <- parseWitnessData $ length txInputs
+  txLocktime <- getWord32le
   return Tx {..}
   where
     replicateList (VarInt c) = replicateM (fromIntegral c) deserialize
@@ -286,11 +284,11 @@ instance ToJSON Tx where
 -- | Data type representing a transaction input.
 data TxIn = TxIn
   { -- | output being spent
-    outpoint :: !OutPoint,
+    txInOutpoint :: !OutPoint,
     -- | signatures and redeem script
-    script :: !ByteString,
+    txInScript :: !ByteString,
     -- | lock-time using sequence numbers (BIP-68)
-    sequence :: !Word32
+    txSequence :: !Word32
   }
   deriving (Eq, Show, Read, Ord, Generic, Hashable, NFData)
 
@@ -342,7 +340,7 @@ data TxOut = TxOut
   { -- | value of output is satoshi
     value :: !Word64,
     -- | pubkey script
-    script :: !ByteString
+    txOutScript :: !ByteString
   }
   deriving (Eq, Show, Read, Ord, Generic, Hashable, NFData)
 
@@ -370,7 +368,7 @@ instance FromJSON TxOut where
     withObject "TxOut" $ \o -> do
       value <- o .: "value"
       t <- o .: "outputscript"
-      script <- maybe mzero return (decodeHex t)
+      txOutScript <- maybe mzero return (decodeHex t)
       return TxOut {..}
 
 instance ToJSON TxOut where

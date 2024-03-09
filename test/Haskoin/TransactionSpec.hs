@@ -1,7 +1,6 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
@@ -228,13 +227,13 @@ pkHashVectors =
 
 testBuildAddrTx :: Network -> Ctx -> Address -> TestCoin -> Bool
 testBuildAddrTx net ctx a (TestCoin v)
-  | isPubKeyAddress a = PayPKHash a.hash160 == out
-  | isScriptAddress a = PayScriptHash a.hash160 == out
+  | isPubKeyAddress a = PayPKHash (hash160 a) == out
+  | isScriptAddress a = PayScriptHash (hash160 a) == out
   | otherwise = undefined
   where
     out = either error id $ do
       tx <- buildAddrTx net ctx [] [(fromJust (addrToText net a), v)]
-      unmarshal ctx (head tx.outputs).script
+      unmarshal ctx (txOutScript $ head (txOutputs tx))
 
 -- We compute an upper bound but it should be close enough to the real size
 -- We give 2 bytes of slack on every signature (1 on r and 1 on s)
@@ -245,13 +244,13 @@ testGuessSize net ctx tx =
     delta = pki + sum (map fst msi)
     guess = guessTxSize pki msi pkout msout
     len = B.length $ runPutS $ serialize tx
-    ins = map f tx.inputs
-    f i = either error id $ unmarshal (net, ctx) i.script
+    ins = map f (txInputs tx)
+    f i = either error id $ unmarshal (net, ctx) (txInScript i)
     pki = length $ filter isSpendPKHash ins
     msi = concatMap shData ins
     shData (ScriptHashInput _ (PayMulSig keys r)) = [(r, length keys)]
     shData _ = []
-    out = map (either error id . unmarshal ctx . (.script)) tx.outputs
+    out = map (either error id . unmarshal ctx . txOutScript) (txOutputs tx)
     pkout = length $ filter isPayPKHash out
     msout = length $ filter isPayScriptHash out
 
@@ -298,9 +297,9 @@ testDetSignTx net ctx (tx, sigis, prv) =
     verify1 = verifyStdTx net ctx tx verData
     verify2 = verifyStdTx net ctx txSigP verData
     verify3 = verifyStdTx net ctx txSigC verData
-    txSigP = either error id $ signTx net ctx tx sigis (map (.key) (tail prv))
-    txSigC = either error id $ signTx net ctx txSigP sigis [(head prv).key]
-    sigData SigInput {..} = (script, value, outpoint)
+    txSigP = either error id $ signTx net ctx tx sigis (map key (tail prv))
+    txSigC = either error id $ signTx net ctx txSigP sigis [key (head prv)]
+    sigData SigInput {..} = (script, sigValue, outpoint)
     verData = map sigData sigis
 
 testDetSignNestedTx :: Network -> Ctx -> (Tx, [SigInput], [PrivateKey]) -> Bool
@@ -312,10 +311,10 @@ testDetSignNestedTx net ctx (tx, sigis, prv) =
     verify3 = verifyStdTx net ctx txSigC verData
     txSigP =
       either error id $
-        signNestedWitnessTx net ctx tx sigis ((.key) <$> tail prv)
+        signNestedWitnessTx net ctx tx sigis (key <$> tail prv)
     txSigC =
       either error id $
-        signNestedWitnessTx net ctx txSigP sigis [(head prv).key]
+        signNestedWitnessTx net ctx txSigP sigis [key $ (head prv)]
     verData = handleSegwit <$> sigis
     handleSegwit (SigInput s v o _ _)
       | isSegwit s = (toP2SH (encodeOutput ctx s), v, o)
@@ -325,7 +324,7 @@ testMergeTx :: Network -> Ctx -> ([Tx], [(ScriptOutput, Word64, OutPoint, Int, I
 testMergeTx net ctx (txs, os) =
   and
     [ isRight mergeRes,
-      length mergedTx.inputs == length os,
+      length (txInputs mergedTx) == length os,
       if enoughSigs
         then isValid
         else not isValid,
@@ -339,9 +338,9 @@ testMergeTx net ctx (txs, os) =
     isValid = verifyStdTx net ctx mergedTx outs
     enoughSigs = all (\(m, c) -> c >= m) sigMap
     sigFun (_, _, _, m, _) inp = (m, sigCnt inp)
-    sigMap = zipWith sigFun os mergedTx.inputs
+    sigMap = zipWith sigFun os (txInputs mergedTx)
     sigCnt inp =
-      case unmarshal (net, ctx) inp.script of
+      case unmarshal (net, ctx) $ txInScript inp of
         Right (RegularInput (SpendMulSig sigs)) -> length sigs
         Right (ScriptHashInput (SpendMulSig sigs) _) -> length sigs
         _ -> error "Invalid input script type"

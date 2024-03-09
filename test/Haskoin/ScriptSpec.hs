@@ -1,6 +1,5 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Haskoin.ScriptSpec (spec) where
@@ -124,7 +123,7 @@ standardSpec net ctx = do
       (decodeInput net ctx . encodeInput net ctx) si `shouldBe` Right si
   prop "can sort multisig scripts" $
     forAll (arbitraryMSOutput ctx) $ \out ->
-      let keyList = map (marshal ctx) (sortMulSig ctx out).keys
+      let keyList = map (marshal ctx) (keys $ sortMulSig ctx out)
           isSorted xs = xs == sort xs
        in keyList `shouldSatisfy` isSorted
   it "can decode inputs with empty signatures" $ do
@@ -143,7 +142,7 @@ standardSpec net ctx = do
 
 scriptSpec :: Network -> Ctx -> Spec
 scriptSpec net ctx =
-  when (net.name == "btc") $
+  when (name net == "btc") $
     it "can verify standard scripts from script_tests.json file" $ do
       xs <- readTestFile "script_tests.json" :: IO [A.Value]
       let vectorsA =
@@ -174,7 +173,7 @@ scriptSpec net ctx =
 
 forkIdScriptSpec :: Network -> Ctx -> Spec
 forkIdScriptSpec net ctx =
-  when (isJust net.sigHashForkId) $
+  when (isJust $ netSigHashForkId net) $
     it "can verify scripts from forkid_script_tests.json file" $ do
       xs <- readTestFile "forkid_script_tests.json" :: IO [A.Value]
       let vectors =
@@ -204,24 +203,24 @@ creditTx :: ByteString -> Word64 -> Tx
 creditTx scriptPubKey val =
   Tx 1 [txI] [txO] [] 0
   where
-    txO = TxOut {value = val, script = scriptPubKey}
+    txO = TxOut {value = val, txOutScript = scriptPubKey}
     txI =
       TxIn
-        { outpoint = nullOutPoint,
-          script = runPutS $ serialize $ Script [OP_0, OP_0],
-          sequence = maxBound
+        { txInOutpoint = nullOutPoint,
+          txInScript = runPutS $ serialize $ Script [OP_0, OP_0],
+          txSequence = maxBound
         }
 
 spendTx :: ByteString -> Word64 -> ByteString -> Tx
 spendTx scriptPubKey val scriptSig =
   Tx 1 [txI] [txO] [] 0
   where
-    txO = TxOut {value = val, script = B.empty}
+    txO = TxOut {value = val, txOutScript = B.empty}
     txI =
       TxIn
-        { outpoint = OutPoint (txHash $ creditTx scriptPubKey val) 0,
-          script = scriptSig,
-          sequence = maxBound
+        { txInOutpoint = OutPoint (txHash $ creditTx scriptPubKey val) 0,
+          txInScript = scriptSig,
+          txSequence = maxBound
         }
 
 parseScript :: String -> ByteString
@@ -240,7 +239,7 @@ replaceToken str = case readMaybe $ "OP_" <> str of
 
 strictSigSpec :: Network -> Ctx -> Spec
 strictSigSpec net ctx =
-  when (net.name == "btc") $ do
+  when (name net == "btc") $ do
     it "can decode strict signatures" $ do
       xs <- readTestFile "sig_strict.json"
       let vectors = mapMaybe decodeHex xs
@@ -259,7 +258,7 @@ strictSigSpec net ctx =
 
 txSigHashSpec :: Network -> Spec
 txSigHashSpec net =
-  when (net.name == "btc") $
+  when (name net == "btc") $
     it "can produce valid sighashes from sighash.json test vectors" $ do
       xs <- readTestFile "sighash.json" :: IO [A.Value]
       let vectors =
@@ -285,7 +284,7 @@ txSigHashSpec net =
 
 txSigHashForkIdSpec :: Network -> Spec
 txSigHashForkIdSpec net =
-  when (net.name == "btc") $
+  when (name net == "btc") $
     it "can produce valid sighashes from forkid_sighash.json test vectors" $ do
       xs <- readTestFile "forkid_sighash.json" :: IO [A.Value]
       let vectors =
@@ -365,12 +364,12 @@ sigHashSpec net ctx = do
 
 testSigHashOne :: Network -> Tx -> Script -> Word64 -> Bool -> Property
 testSigHashOne net tx s val acp =
-  not (null tx.inputs) ==>
-    if length tx.inputs > length tx.outputs
+  not (null (txInputs tx)) ==>
+    if length (txInputs tx) > length (txOutputs tx)
       then res `shouldBe` one
       else res `shouldNotBe` one
   where
-    res = txSigHash net tx s val (length tx.inputs - 1) (f sigHashSingle)
+    res = txSigHash net tx s val (length (txInputs tx) - 1) (f sigHashSingle)
     one = "0100000000000000000000000000000000000000000000000000000000000000"
     f =
       if acp

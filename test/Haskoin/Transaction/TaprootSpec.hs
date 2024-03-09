@@ -2,7 +2,6 @@
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Haskoin.Transaction.TaprootSpec (spec) where
@@ -42,7 +41,7 @@ spec = prepareContext $ \ctx -> do
 
 testHashes :: TestScriptPubKey -> IO ()
 testHashes testData =
-  mapM_ checkMASTDetails $ ((.mast) . tspkGiven) testData
+  mapM_ checkMASTDetails $ (mast . tspkGiven) testData
   where
     checkMASTDetails theMAST = do
       -- Leaf hashes
@@ -77,7 +76,7 @@ testControlBlocks ctx testData = do
     calculatedControlBlocks =
       (!! 1) . encodeTaprootWitness ctx . ScriptPathSpend <$> scriptPathSpends
     scriptPathSpends =
-      mkScriptPathSpend <$> maybe mempty getMerkleProofs theOutput.mast
+      mkScriptPathSpend <$> maybe mempty getMerkleProofs (mast theOutput)
     mkScriptPathSpend (leafVersion, script, proof) =
       ScriptPathData
         { annex = Nothing,
@@ -85,7 +84,7 @@ testControlBlocks ctx testData = do
           script,
           extIsOdd = odd $ keyParity ctx theOutputKey,
           leafVersion,
-          internalKey = theOutput.internalKey,
+          internalKey = outInternalKey theOutput,
           control = BA.convert <$> proof
         }
     onExamples = zipWithM (@?=) calculatedControlBlocks
@@ -112,7 +111,7 @@ spkGivenParseJSON :: Ctx -> Value -> Parser SpkGiven
 spkGivenParseJSON ctx = withObject "SpkGiven" $ \obj -> do
   pxopk@XOnlyPubKey {} <- unmarshalValue ctx =<< obj .: "internalPubkey"
   tree <- traverse parseScriptTree =<< obj .:? "scriptTree"
-  return $ SpkGiven $ TaprootOutput pxopk.point tree
+  return $ SpkGiven $ TaprootOutput (xonlyPoint pxopk) tree
   where
     parseScriptTree v =
       parseScriptLeaf v

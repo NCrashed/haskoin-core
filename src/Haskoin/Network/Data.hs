@@ -1,6 +1,5 @@
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE NoFieldSelectors #-}
 
 module Haskoin.Network.Data
   ( Network (..),
@@ -31,7 +30,7 @@ data Network = Network
     -- | prefix for extended private key
     xPrvPrefix :: !Word32,
     -- | network magic
-    magic :: !Word32,
+    netMagic :: !Word32,
     -- | genesis block header
     genesisHeader :: !BlockHeader,
     -- | maximum block size in bytes
@@ -65,7 +64,7 @@ data Network = Network
     -- | peer-to-peer network seeds
     seeds :: ![String],
     -- | fork id for replay protection
-    sigHashForkId :: !(Maybe Word32),
+    netSigHashForkId :: !(Maybe Word32),
     -- | EDA start block height
     edaHeight :: !(Maybe Word32),
     -- | DAA start block height

@@ -1,7 +1,5 @@
 {-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE NoFieldSelectors #-}
 
 module Haskoin.Crypto.HashSpec (spec) where
 
@@ -66,17 +64,17 @@ spec =
           fromString (cs $ encodeHex $ runPutS $ serialize h) == h
     describe "Test Vectors" $ do
       it "Passes RIPEMD160 test vectors" $
-        mapM_ (testVector ripemd160 (.get)) ripemd160Vectors
+        mapM_ (testVector ripemd160 getHash160) ripemd160Vectors
       it "Passes SHA1 test vectors" $
-        mapM_ (testVector sha1 (.get)) sha1Vectors
+        mapM_ (testVector sha1 getHash160) sha1Vectors
       it "Passes SHA256 test vectors" $
-        mapM_ (testVector sha256 (.get)) sha256Vectors
+        mapM_ (testVector sha256 getHash256) sha256Vectors
       it "Passes SHA512 test vectors" $
-        mapM_ (testVector sha512 (.get)) sha512Vectors
+        mapM_ (testVector sha512 getHash512) sha512Vectors
       it "Passes HMAC_SHA256 test vectors" $
-        mapM_ (testHMACVector hmac256 (.get)) hmacSha256Vectors
+        mapM_ (testHMACVector hmac256 getHash256) hmacSha256Vectors
       it "Passes HMAC_SHA512 test vectors" $
-        mapM_ (testHMACVector hmac512 (.get)) hmacSha512Vectors
+        mapM_ (testHMACVector hmac512 getHash512) hmacSha512Vectors
 
 joinSplit512 :: Hash256 -> Hash256 -> Bool
 joinSplit512 a b = split512 (join512 (a, b)) == (a, b)

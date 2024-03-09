@@ -1,5 +1,4 @@
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Haskoin.BlockSpec
@@ -81,22 +80,22 @@ spec = prepareContext $ \ctx -> do
       let net = bchRegTest
           bb =
             withChain net $ do
-              chain net net.genesisHeader 100
+              chain net (genesisHeader net) 100
               getBestBlockHeader
-       in bb.height `shouldBe` 100
+       in height bb `shouldBe` 100
     it "builds a block locator on bchRegTest" $
       let net = bchRegTest
           loc =
             withChain net $ do
-              chain net net.genesisHeader 100
+              chain net (genesisHeader net) 100
               bb <- getBestBlockHeader
               blockLocatorNodes bb
-          heights = map (.height) loc
+          heights = map height loc
        in heights `shouldBe` [100, 99 .. 90] <> [88, 84, 76, 60, 28, 0]
     it "follows split chains on bchRegTest" $
       let net = bchRegTest
           bb = withChain net $ splitChain net >> getBestBlockHeader
-       in bb.height `shouldBe` 4035
+       in height bb `shouldBe` 4035
   describe "block hash" $ do
     prop "encodes and decodes block hash" $
       forAll arbitraryBlockHash $ \h ->
@@ -134,32 +133,32 @@ spec = prepareContext $ \ctx -> do
 --           → → 2185
 splitChain :: Network -> State HeaderMemory ()
 splitChain net = do
-  start <- go 1 net.genesisHeader 2015
+  start <- go 1 (genesisHeader net) 2015
   e 2015 (head start)
-  tail1 <- go 2 (head start).header 2016
+  tail1 <- go 2 (nodeHeader $ head start) 2016
   e 4031 (head tail1)
-  tail2 <- go 3 (head start).header 20
+  tail2 <- go 3 (nodeHeader $ head start) 20
   e 2035 (head tail2)
-  tail3 <- go 4 (head tail2).header 2000
+  tail3 <- go 4 (nodeHeader $ head tail2) 2000
   e 4035 (head tail3)
-  tail4 <- go 5 (head tail2).header 150
+  tail4 <- go 5 (nodeHeader $ head tail2) 150
   e 2185 (head tail4)
   sp1 <- splitPoint (head tail1) (head tail3)
   unless (sp1 == head start) $
     error $
       "Split point wrong between blocks 4031 and 4035: "
-        ++ show sp1.height
+        ++ show (height sp1)
   sp2 <- splitPoint (head tail4) (head tail3)
   unless (sp2 == head tail2) $
     error $
       "Split point wrong between blocks 2185 and 4035: "
-        ++ show sp2.height
+        ++ show (height sp2)
   where
     e n bn@BlockNode {} =
-      unless (bn.height == n) $
+      unless (height bn == n) $
         error $
           "Node height "
-            ++ show bn.height
+            ++ show (height bn)
             ++ " of first chunk should be "
             ++ show n
     go seed start n = do
@@ -278,7 +277,7 @@ testCompactBitcoinCore = do
 runMerkleVector :: (Text, [Text]) -> Assertion
 runMerkleVector (r, hs) =
   assertBool "merkle vector" $
-    buildMerkleRoot (map f hs) == (f r).get
+    buildMerkleRoot (map f hs) == getTxHash (f r)
   where
     f = fromJust . hexToTxHash
 
@@ -374,7 +373,7 @@ testSubsidy :: Network -> Assertion
 testSubsidy net = go (2 * 50 * 100 * 1000 * 1000) 0
   where
     go previous_subsidy halvings = do
-      let height = halvings * net.halvingInterval
+      let height = halvings * (halvingInterval net)
           subsidy = computeSubsidy net height
       if halvings >= 64
         then subsidy `shouldBe` 0

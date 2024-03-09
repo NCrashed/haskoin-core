@@ -4,7 +4,6 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE NoFieldSelectors #-}
 
 -- |
 -- Module      : Haskoin.Script.Common
@@ -57,7 +56,7 @@ import Haskoin.Util.Helpers (decodeHex, encodeHex, hexEncoding)
 -- pay-to-witness-public-key-hash transactions.
 newtype Script = Script
   { -- | script operators defining this script
-    ops :: [ScriptOp]
+    scriptOps :: [ScriptOp]
   }
   deriving (Eq, Show, Read, Generic)
   deriving newtype (Hashable, NFData)
