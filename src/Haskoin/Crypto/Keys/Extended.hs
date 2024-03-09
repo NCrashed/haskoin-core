@@ -308,7 +308,7 @@ prvSubKey ::
   -- | extended child private key
   XPrvKey
 prvSubKey ctx xkey child
-  | child >= 0 && child < 0x80000000 =
+  | child >= 0 =
       XPrvKey (privDepth xkey + 1) (xPrvFP ctx xkey) child c k
   | otherwise = error "Invalid child derivation index"
   where
@@ -329,7 +329,7 @@ pubSubKey ::
   -- | extended child public key
   XPubKey
 pubSubKey ctx xKey child
-  | child >= 0 && child < 0x80000000 =
+  | child >= 0 =
       XPubKey (xpubDepth xKey + 1) (xPubFP ctx xKey) child c pK
   | otherwise = error "Invalid child derivation index"
   where
@@ -353,7 +353,7 @@ hardSubKey ::
   -- | extended child private key
   XPrvKey
 hardSubKey ctx xkey child
-  | child >= 0 && child < 0x80000000 =
+  | child >= 0 =
       XPrvKey (privDepth xkey + 1) (xPrvFP ctx xkey) i c k
   | otherwise = error "Invalid child derivation index"
   where
